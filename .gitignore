@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Файлы загрузок (их не коммитим!)
+storage/submissions/
+
+# SQLite DB (локальная копия — не в репо)
+instance/
+*.db
+
+# ОС
+.DS_Store
+Thumbs.db

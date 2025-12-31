@@ -68,26 +68,26 @@ async def get_assignments(student_id: str):
 
         # Получаем задания + информацию о сдаче
         cur = conn.execute("""
-            SELECT
-                a.id,
-                a.title,
-                a.description,
-                a.deadline,
-                s.subject_id,
-                sub.id IS NOT NULL as submitted,
-                sub.file_path
-            FROM assignments a
-            JOIN subjects s ON a.subject_id = s.id
-            LEFT JOIN submissions sub
-                ON sub.assignment_id = a.id AND sub.student_id = ?
-            ORDER BY a.deadline
-        """, (student_id_int,))
+                SELECT
+                    a.id,
+                    a.title,
+                    a.description,
+                    a.deadline,
+                    s.name AS subject,      -- ← имя предмета (полезнее для фронтенда)
+                    sub.id IS NOT NULL as submitted,
+                    sub.file_path
+                FROM assignments a
+                JOIN subjects s ON a.subject_id = s.id
+                LEFT JOIN submissions sub
+                    ON sub.assignment_id = a.id AND sub.student_id = ?
+                ORDER BY a.deadline
+            """, (student_id_int,))
 
         assignments = []
         for row in cur.fetchall():
             assignments.append({
                 "id": row["id"],
-                "subject_id": row["subject_id"],
+                "subject": row["subject"],          # ← теперь это строка, например "Математика"
                 "title": row["title"],
                 "description": row["description"],
                 "deadline": row["deadline"],

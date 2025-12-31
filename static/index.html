@@ -103,6 +103,7 @@
         const deadline = new Date(a.deadline).toLocaleDateString('ru-RU');
         el.innerHTML = `
           <div class="card-body">
+            <h6 class="text-muted">${a.subject}</h6>
             <h5>${a.title}</h5>
             <p>${a.description}</p>
             <p><small>Дедлайн: ${deadline}</small></p>

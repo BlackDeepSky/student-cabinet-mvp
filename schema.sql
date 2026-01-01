@@ -1,3 +1,20 @@
+-- Преподаватели
+CREATE TABLE IF NOT EXISTS teachers (
+    id         INTEGER PRIMARY KEY,
+    teacher_id TEXT NOT NULL UNIQUE,  -- например: T-MATH-01
+    last_name  TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    patronymic TEXT,
+    email      TEXT UNIQUE
+);
+
+-- Связь: кто ведёт какой предмет
+CREATE TABLE IF NOT EXISTS subject_teachers (
+    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    teacher_id INTEGER NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+    PRIMARY KEY (subject_id, teacher_id)
+);
+
 -- Таблица студентов (с учётом ФИО и уникального student_id)
 CREATE TABLE IF NOT EXISTS students (
     id           INTEGER PRIMARY KEY,

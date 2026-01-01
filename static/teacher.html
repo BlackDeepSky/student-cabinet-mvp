@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Кабинет преподавателя</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .file-link { font-size: 0.9em; }
+    .grade-form { margin-top: 8px; }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <h1 class="mb-4">Кабинет преподавателя</h1>
+
+    <!-- Форма входа -->
+    <div id="login-section" class="card p-4 mb-4">
+      <h3>Вход</h3>
+      <p>Введите ваш ID преподавателя (например: T-MATH-01)</p>
+      <form id="login-form">
+        <div class="mb-3">
+          <input type="text" id="teacher-id" class="form-control" placeholder="ID преподавателя" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Войти</button>
+      </form>
+    </div>
+
+    <!-- Основной интерфейс -->
+    <div id="main-section" style="display:none;">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Здравствуйте, <span id="teacher-name"></span>!</h2>
+        <button id="logout-btn" class="btn btn-outline-secondary">Выйти</button>
+      </div>
+
+      <h3>Отправленные работы</h3>
+      <div id="submissions"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentTeacherId = localStorage.getItem('teacher_id');
+
+    function showLogin() {
+      document.getElementById('login-section').style.display = 'block';
+      document.getElementById('main-section').style.display = 'none';
+    }
+    function showMain() {
+      document.getElementById('login-section').style.display = 'none';
+      document.getElementById('main-section').style.display = 'block';
+    }
+
+    // Вход
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const teacherId = document.getElementById('teacher-id').value.trim();
+      if (!teacherId) return;
+
+      try {
+        const res = await fetch('/api/teacher/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `teacher_id=${encodeURIComponent(teacherId)}`
+        });
+        if (!res.ok) throw new Error('Преподаватель не найден');
+        const teacher = await res.json();
+        currentTeacherId = teacherId;
+        localStorage.setItem('teacher_id', teacherId);
+        document.getElementById('teacher-name').textContent = 
+          `${teacher.last_name} ${teacher.first_name}${teacher.patronymic ? ' ' + teacher.patronymic : ''}`;
+        loadSubmissions();
+        showMain();
+      } catch (err) {
+        alert('Ошибка: ' + err.message);
+      }
+    });
+
+    // Выход
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      localStorage.removeItem('teacher_id');
+      currentTeacherId = null;
+      showLogin();
+    });
+
+    // Загрузка работ
+    async function loadSubmissions() {
+      const res = await fetch(`/api/teacher/assignments/${currentTeacherId}`);
+      const submissions = await res.json();
+      const cont = document.getElementById('submissions');
+      cont.innerHTML = '';
+
+      if (submissions.length === 0) {
+        cont.innerHTML = '<p class="text-muted">Нет отправленных работ.</p>';
+        return;
+      }
+
+      submissions.forEach(sub => {
+        const deadline = new Date(sub.deadline).toLocaleDateString('ru-RU');
+        const submittedAt = sub.submitted_at ? new Date(sub.submitted_at).toLocaleString('ru-RU') : '—';
+        const fileUrl = sub.file_path ? `/download/${sub.file_path}` : null;
+
+        const card = document.createElement('div');
+        card.className = 'card mb-3';
+        card.innerHTML = `
+          <div class="card-body">
+            <h5>${sub.subject} — ${sub.title}</h5>
+            <p><strong>Студент:</strong> ${sub.student_name} (${sub.student_id})</p>
+            <p><small>Дедлайн: ${deadline}</small></p>
+            <p><small>Отправлено: ${submittedAt}</small></p>
+            ${fileUrl ? 
+              `<p><a href="${fileUrl}" class="file-link" target="_blank">📎 Скачать работу</a></p>` : 
+              '<p class="text-muted">Файл не найден</p>'
+            }
+            <form class="grade-form" data-student-id="${sub.student_id}" data-subject="${sub.subject}">
+              <div class="row">
+                <div class="col-md-4">
+                  <input type="number" class="form-control form-control-sm" placeholder="Оценка (0-100)" min="0" max="100">
+                </div>
+                <div class="col-md-4">
+                  <select class="form-select form-select-sm">
+                    <option value="не сдано">не сдано</option>
+                    <option value="сдано">сдано</option>
+                    <option value="зачёт">зачёт</option>
+                    <option value="не допущен">не допущен</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <button type="submit" class="btn btn-success btn-sm">Сохранить</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        `;
+        cont.appendChild(card);
+      });
+
+      // Обработчики сохранения оценок
+      document.querySelectorAll('.grade-form').forEach(form => {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const studentId = e.target.dataset.studentId;
+          const subject = e.target.dataset.subject;
+          const gradeInput = e.target.querySelector('input');
+          const statusSelect = e.target.querySelector('select');
+          
+          const grade = gradeInput.value ? parseInt(gradeInput.value) : null;
+          const status = statusSelect.value;
+
+          const formData = new FormData();
+          formData.append('student_id', studentId);
+          formData.append('subject_name', subject);
+          if (grade !== null) formData.append('grade', grade);
+          formData.append('status', status);
+
+          const res = await fetch('/api/teacher/grade', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (res.ok) {
+            alert('Оценка сохранена!');
+          } else {
+            alert('Ошибка при сохранении');
+          }
+        });
+      });
+    }
+
+    // Инициализация
+    if (currentTeacherId) {
+      fetch(`/api/teacher/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `teacher_id=${encodeURIComponent(currentTeacherId)}`
+      }).then(res => {
+        if (res.ok) {
+          res.json().then(teacher => {
+            document.getElementById('teacher-name').textContent = 
+              `${teacher.last_name} ${teacher.first_name}${teacher.patronymic ? ' ' + teacher.patronymic : ''}`;
+            loadSubmissions();
+            showMain();
+          });
+        } else {
+          showLogin();
+        }
+      }).catch(() => showLogin());
+    } else {
+      showLogin();
+    }
+  </script>
+</body>
+</html>

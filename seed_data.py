@@ -19,7 +19,7 @@ def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
             conn.executescript(f.read())
-        # Включаем поддержку внешних ключей (по умолчанию выключена в SQLite!)
+        # Включаем поддержку внешних ключей
         conn.execute("PRAGMA foreign_keys = ON;")
 
 def seed_data():
@@ -31,58 +31,14 @@ def seed_data():
         students = [
             ("2023-IS-042", "Иванов", "Иван", "Иванович", "ivanov@example.com", "ИС-31"),
             ("2023-IS-043", "Петрова", "Мария", "Сергеевна", "petrova@example.com", "ИС-31"),
-            ("2023-ЭК-115", "Сидоров", "Алексей", None, "sidorov@example.com", "ЭК-22"),  # без отчества
+            ("2023-ЭК-115", "Сидоров", "Алексей", None, "sidorov@example.com", "ЭК-22"),
         ]
         for stud in students:
-            # Используем INSERT OR IGNORE — если student_id уже есть, пропустим
             cur.execute("""
                 INSERT OR IGNORE INTO students 
                 (student_id, last_name, first_name, patronymic, email, group_name)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, stud)
-
-        # --- Преподаватели ---
-        teachers = [
-            ("T-MATH-01", "Смирнов", "Пётр", "Алексеевич", "smirnov@example.com"),
-            ("T-CS-02", "Козлова", "Елена", "Викторовна", "kozlova@example.com"),
-        ]
-        for teacher in teachers:
-            cur.execute("""
-                INSERT OR IGNORE INTO teachers (teacher_id, last_name, first_name, patronymic, email)
-                VALUES (?, ?, ?, ?, ?)
-            """, teacher)
-
-        # --- Кто ведёт какие предметы ---
-        # Получим ID преподавателей
-        teacher_ids = {}
-        for tid, ln, fn, p, email in teachers:
-            cur.execute("SELECT id FROM teachers WHERE teacher_id = ?", (tid,))
-            teacher_ids[tid] = cur.fetchone()[0]
-
-        # Получим ID предметов (как раньше)
-        subject_ids = {}
-        cur.execute("SELECT id, code FROM subjects")
-        for row in cur.fetchall():
-            # Обрати внимание: row[0] = id, row[1] = code
-            # Нужно получить code → но у нас в subjects нет code в seed? 
-            # Исправим: сделаем словарь по имени
-            pass
-
-        # Лучше: свяжем по имени предмета
-        cur.execute("SELECT id, name FROM subjects")
-        subject_name_to_id = {row[1]: row[0] for row in cur.fetchall()}
-
-        subject_teacher_links = [
-            ("Математика", "T-MATH-01"),
-            ("Программирование на Python", "T-CS-02"),
-        ]
-        for subj_name, t_id in subject_teacher_links:
-            s_id = subject_name_to_id[subj_name]
-            t_id_int = teacher_ids[t_id]
-            cur.execute("""
-                INSERT OR IGNORE INTO subject_teachers (subject_id, teacher_id)
-                VALUES (?, ?)
-            """, (s_id, t_id_int))
 
         # --- Предметы ---
         subjects = [
@@ -95,14 +51,63 @@ def seed_data():
                 INSERT OR IGNORE INTO subjects (name, code, semester)
                 VALUES (?, ?, ?)
             """, subj)
+        conn.commit()  # Гарантируем, что предметы записаны
 
-        # Получим ID предметов для связей
+        # --- Преподаватели ---
+        teachers = [
+            ("T-MATH-01", "Смирнов", "Пётр", "Алексеевич", "smirnov@example.com"),
+            ("T-CS-02", "Козлова", "Елена", "Викторовна", "kozlova@example.com"),
+        ]
+        for teacher in teachers:
+            cur.execute("""
+                INSERT OR IGNORE INTO teachers (teacher_id, last_name, first_name, patronymic, email)
+                VALUES (?, ?, ?, ?, ?)
+            """, teacher)
+        conn.commit()
+
+        # --- Связи: кто ведёт какой предмет ---
+        # Получаем ID преподавателей
+        teacher_ids = {}
+        for tid, _, _, _, _ in teachers:
+            cur.execute("SELECT id FROM teachers WHERE teacher_id = ?", (tid,))
+            row = cur.fetchone()
+            if row:
+                teacher_ids[tid] = row[0]
+
+        # Получаем ID предметов по имени
+        subject_name_to_id = {}
+        cur.execute("SELECT id, name FROM subjects")
+        for row in cur.fetchall():
+            subject_name_to_id[row[1]] = row[0]
+
+        # Проверяем наличие нужных предметов
+        required_subjects = ["Математика", "Программирование на Python"]
+        for subj in required_subjects:
+            if subj not in subject_name_to_id:
+                raise ValueError(f"Предмет '{subj}' отсутствует в таблице subjects.")
+
+        # Вставляем связи
+        subject_teacher_links = [
+            ("Математика", "T-MATH-01"),
+            ("Программирование на Python", "T-CS-02"),
+        ]
+        for subj_name, t_id in subject_teacher_links:
+            s_id = subject_name_to_id[subj_name]
+            t_id_int = teacher_ids[t_id]
+            cur.execute("""
+                INSERT OR IGNORE INTO subject_teachers (subject_id, teacher_id)
+                VALUES (?, ?)
+            """, (s_id, t_id_int))
+
+        # --- Задания ---
+        # Получаем ID предметов по коду
         subject_ids = {}
         for name, code, _ in subjects:
             cur.execute("SELECT id FROM subjects WHERE code = ?", (code,))
-            subject_ids[code] = cur.fetchone()[0]
+            row = cur.fetchone()
+            if row:
+                subject_ids[code] = row[0]
 
-        # --- Задания ---
         assignments = [
             (subject_ids["MATH101"], "Контрольная работа №1", "Решить 10 задач", date(2025, 2, 10)),
             (subject_ids["CS102"], "Лабораторная №1", "Написать скрипт на Python", date(2025, 2, 15)),

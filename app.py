@@ -11,6 +11,8 @@ import os
 import shutil
 from pathlib import Path
 from datetime import datetime
+from fastapi.responses import FileResponse
+from typing import Optional
 
 # Автоматическая инициализация БД при запуске
 if not os.path.exists("instance/app.db"):
@@ -172,3 +174,102 @@ async def submit_work(
         """, (student_id_int, assignment_id, file_path))
 
         return {"message": "Работа успешно отправлена!", "file": filename}
+    
+@app.post("/api/teacher/login")
+async def teacher_login(teacher_id: str = Form(...)):
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT id, last_name, first_name, patronymic
+            FROM teachers
+            WHERE teacher_id = ?
+        """, (teacher_id.strip(),))
+        teacher = cur.fetchone()
+        if not teacher:
+            raise HTTPException(404, "Преподаватель не найден")
+        return dict(teacher)
+
+@app.get("/api/teacher/assignments/{teacher_id}")
+async def get_teacher_assignments(teacher_id: str):
+    with get_db() as conn:
+        # Получаем ID преподавателя
+        cur = conn.execute("SELECT id FROM teachers WHERE teacher_id = ?", (teacher_id,))
+        teacher_row = cur.fetchone()
+        if not teacher_row:
+            raise HTTPException(404, "Преподаватель не найден")
+        teacher_id_int = teacher_row[0]
+
+        # Получаем все задания по его предметам + отправленные работы
+        cur = conn.execute("""
+            SELECT
+                a.id AS assignment_id,
+                a.title,
+                a.deadline,
+                s.name AS subject,
+                st.last_name || ' ' || st.first_name AS student_name,
+                st.student_id,
+                sub.file_path,
+                sub.submitted_at,
+                gr.grade,
+                gr.status
+            FROM assignments a
+            JOIN subjects s ON a.subject_id = s.id
+            JOIN subject_teachers st_link ON s.id = st_link.subject_id
+            JOIN students st ON st.id IN (
+                SELECT DISTINCT student_id FROM submissions WHERE assignment_id = a.id
+            )
+            LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.student_id = st.id
+            LEFT JOIN grades gr ON gr.student_id = st.id AND gr.subject_id = s.id
+            WHERE st_link.teacher_id = ?
+            ORDER BY a.deadline DESC, st.last_name
+        """, (teacher_id_int,))
+
+        assignments = [dict(row) for row in cur.fetchall()]
+        return assignments
+    
+@app.post("/api/teacher/grade")
+async def set_grade(
+    student_id: str = Form(...),
+    subject_name: str = Form(...),
+    grade: Optional[int] = Form(None),
+    status: str = Form("не сдано")
+):
+    with get_db() as conn:
+        # Получаем ID студента
+        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (student_id,))
+        student_row = cur.fetchone()
+        if not student_row:
+            raise HTTPException(404, "Студент не найден")
+        student_id_int = student_row[0]
+
+        # Получаем ID предмета
+        cur = conn.execute("SELECT id FROM subjects WHERE name = ?", (subject_name,))
+        subject_row = cur.fetchone()
+        if not subject_row:
+            raise HTTPException(404, "Предмет не найден")
+        subject_id_int = subject_row[0]
+
+        # Обновляем или вставляем оценку
+        conn.execute("""
+            INSERT INTO grades (student_id, subject_id, grade, status)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(student_id, subject_id)
+            DO UPDATE SET grade = excluded.grade, status = excluded.status
+        """, (student_id_int, subject_id_int, grade, status))
+
+        return {"message": "Оценка сохранена"}
+    
+@app.get("/download/{path:path}")
+async def download_file(path: str):
+    """
+    Позволяет скачивать файлы из storage/submissions/...
+    Внимание: в продакшене нужна авторизация!
+    """
+    full_path = os.path.join("storage", "submissions", path)
+    if not os.path.exists(full_path):
+        raise HTTPException(404, "Файл не найден")
+    return FileResponse(full_path)
+
+@app.get("/teacher")
+async def teacher_page():
+    with open("static/teacher.html", encoding="utf-8") as f:
+        return HTMLResponse(f.read())

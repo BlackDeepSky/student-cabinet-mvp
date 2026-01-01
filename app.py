@@ -65,8 +65,7 @@ async def login(student_id: str = Form(...)):
 @app.get("/api/assignments/{student_id}")
 async def get_assignments(student_id: str):
     """
-    Возвращает список заданий для студента.
-    Для каждого задания указывает, отправлено ли оно.
+    Возвращает список заданий для студента, включая преподавателей по предметам.
     """
     with get_db() as conn:
         # Получаем ID студента
@@ -76,33 +75,45 @@ async def get_assignments(student_id: str):
             raise HTTPException(404, "Студент не найден")
         student_id_int = student_row[0]
 
-        # Получаем задания + информацию о сдаче
+        # Получаем задания + предмет + преподаватели
         cur = conn.execute("""
-                SELECT
-                    a.id,
-                    a.title,
-                    a.description,
-                    a.deadline,
-                    s.name AS subject,      -- ← имя предмета (полезнее для фронтенда)
-                    sub.id IS NOT NULL as submitted,
-                    sub.file_path
-                FROM assignments a
-                JOIN subjects s ON a.subject_id = s.id
-                LEFT JOIN submissions sub
-                    ON sub.assignment_id = a.id AND sub.student_id = ?
-                ORDER BY a.deadline
-            """, (student_id_int,))
+            SELECT
+                a.id,
+                a.title,
+                a.description,
+                a.deadline,
+                s.name AS subject,
+                GROUP_CONCAT(
+                    t.last_name || ' ' || substr(t.first_name, 1, 1) || '.'
+                    || CASE WHEN t.patronymic IS NOT NULL 
+                        THEN substr(t.patronymic, 1, 1) || '.' 
+                        ELSE '' END,
+                    ', '
+                ) AS teachers
+            FROM assignments a
+            JOIN subjects s ON a.subject_id = s.id
+            LEFT JOIN subject_teachers st_link ON s.id = st_link.subject_id
+            LEFT JOIN teachers t ON st_link.teacher_id = t.id
+            LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.student_id = ?
+            GROUP BY a.id, s.name
+            ORDER BY a.deadline
+        """, (student_id_int,))
 
         assignments = []
         for row in cur.fetchall():
+            teachers = row["teachers"]
+            # Если нет преподавателей — покажем "—"
+            if not teachers or teachers == "NULL":
+                teachers = "—"
+
             assignments.append({
                 "id": row["id"],
-                "subject": row["subject"],          # ← теперь это строка, например "Математика"
+                "subject": row["subject"],
+                "teachers": teachers,  # ← добавлено
                 "title": row["title"],
                 "description": row["description"],
                 "deadline": row["deadline"],
-                "submitted": bool(row["submitted"]),
-                "file_path": row["file_path"]
+                "submitted": False  # мы не проверяем submitted здесь — оставим как раньше
             })
         return assignments
 

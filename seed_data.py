@@ -41,6 +41,49 @@ def seed_data():
                 VALUES (?, ?, ?, ?, ?, ?)
             """, stud)
 
+        # --- Преподаватели ---
+        teachers = [
+            ("T-MATH-01", "Смирнов", "Пётр", "Алексеевич", "smirnov@example.com"),
+            ("T-CS-02", "Козлова", "Елена", "Викторовна", "kozlova@example.com"),
+        ]
+        for teacher in teachers:
+            cur.execute("""
+                INSERT OR IGNORE INTO teachers (teacher_id, last_name, first_name, patronymic, email)
+                VALUES (?, ?, ?, ?, ?)
+            """, teacher)
+
+        # --- Кто ведёт какие предметы ---
+        # Получим ID преподавателей
+        teacher_ids = {}
+        for tid, ln, fn, p, email in teachers:
+            cur.execute("SELECT id FROM teachers WHERE teacher_id = ?", (tid,))
+            teacher_ids[tid] = cur.fetchone()[0]
+
+        # Получим ID предметов (как раньше)
+        subject_ids = {}
+        cur.execute("SELECT id, code FROM subjects")
+        for row in cur.fetchall():
+            # Обрати внимание: row[0] = id, row[1] = code
+            # Нужно получить code → но у нас в subjects нет code в seed? 
+            # Исправим: сделаем словарь по имени
+            pass
+
+        # Лучше: свяжем по имени предмета
+        cur.execute("SELECT id, name FROM subjects")
+        subject_name_to_id = {row[1]: row[0] for row in cur.fetchall()}
+
+        subject_teacher_links = [
+            ("Математика", "T-MATH-01"),
+            ("Программирование на Python", "T-CS-02"),
+        ]
+        for subj_name, t_id in subject_teacher_links:
+            s_id = subject_name_to_id[subj_name]
+            t_id_int = teacher_ids[t_id]
+            cur.execute("""
+                INSERT OR IGNORE INTO subject_teachers (subject_id, teacher_id)
+                VALUES (?, ?)
+            """, (s_id, t_id_int))
+
         # --- Предметы ---
         subjects = [
             ("Математика", "MATH101", "2025-1"),

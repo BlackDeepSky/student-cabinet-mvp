@@ -12,6 +12,14 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 
+# Автоматическая инициализация БД при запуске
+if not os.path.exists("instance/app.db"):
+    print("База данных не найдена. Инициализирую...")
+    import subprocess
+    subprocess.run(["python", "seed_data.py"])
+else:
+    print("База данных найдена. Продолжаю.")
+
 # Конфигурация
 DB_PATH = "instance/app.db"
 UPLOAD_BASE_DIR = "storage/submissions"

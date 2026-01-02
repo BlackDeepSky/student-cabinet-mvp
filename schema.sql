@@ -29,17 +29,23 @@ CREATE TABLE IF NOT EXISTS assignments (
     FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
 );
 
--- Отправленные работы
+-- Удалим file_path из submissions
 CREATE TABLE IF NOT EXISTS submissions (
     id            INTEGER PRIMARY KEY,
-    student_id    INTEGER NOT NULL,
-    assignment_id INTEGER NOT NULL,
-    file_path     TEXT NOT NULL,
+    student_id    INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
     submitted_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    review        TEXT,  -- ← поле для рецензии (пока NULL)
     status        TEXT DEFAULT 'submitted',
-    FOREIGN KEY (student_id)    REFERENCES students(id)    ON DELETE CASCADE,
-    FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
     UNIQUE(student_id, assignment_id)
+);
+
+-- Новая таблица: файлы работы
+CREATE TABLE IF NOT EXISTS submission_files (
+    id            INTEGER PRIMARY KEY,
+    submission_id INTEGER NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+    file_path     TEXT NOT NULL,
+    uploaded_at   DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Успеваемость (итог по предмету)

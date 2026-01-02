@@ -97,7 +97,8 @@
       submissions.forEach(sub => {
         const deadline = new Date(sub.deadline).toLocaleDateString('ru-RU');
         const submittedAt = sub.submitted_at ? new Date(sub.submitted_at).toLocaleString('ru-RU') : '—';
-        const fileUrl = sub.file_path ? `/download/${sub.file_path}` : null;
+        const filePath = sub.file_path.replace(/^storage\//, '');
+        const fileUrl = sub.file_path ? `/download/${filePath}` : null;
 
         const card = document.createElement('div');
         card.className = 'card mb-3';

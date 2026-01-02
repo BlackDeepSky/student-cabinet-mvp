@@ -275,7 +275,11 @@ async def download_file(path: str):
     Позволяет скачивать файлы из storage/submissions/...
     Внимание: в продакшене нужна авторизация!
     """
-    full_path = os.path.join("storage", "submissions", path)
+    # Убедимся, что путь не начинается с "../" — защита от path traversal
+    if ".." in path or path.startswith("/"):
+        raise HTTPException(400, "Некорректный путь")
+
+    full_path = os.path.join("storage", path)
     if not os.path.exists(full_path):
         raise HTTPException(404, "Файл не найден")
     return FileResponse(full_path)

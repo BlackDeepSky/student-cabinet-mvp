@@ -112,7 +112,7 @@
               ? '<span class="badge bg-success submitted-badge">Отправлено</span>' 
               : `
                 <form class="submit-form" data-assignment-id="${a.id}">
-                  <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" required>
+                  <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
                   <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
                 </form>
               `}
@@ -127,12 +127,14 @@
           e.preventDefault();
           const assignmentId = e.target.dataset.assignmentId;
           const fileInput = e.target.querySelector('input[type="file"]');
-          const file = fileInput.files[0];
-          if (!file) return;
+          const files = Array.from(fileInput.files); // ← массив файлов
+          if (!files.length) return;
 
           const formData = new FormData();
           formData.append('student_id', currentStudentId);
-          formData.append('file', file);
+          files.forEach(file => {
+              formData.append('files', file); // ← имя параметра должно совпадать с app.py
+          });
 
           const res = await fetch(`/api/submit/${assignmentId}`, {
             method: 'POST',

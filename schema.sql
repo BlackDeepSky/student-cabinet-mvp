@@ -29,18 +29,18 @@ CREATE TABLE IF NOT EXISTS assignments (
     FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
 );
 
--- Удалим file_path из submissions
+-- Отправленные работы
 CREATE TABLE IF NOT EXISTS submissions (
     id            INTEGER PRIMARY KEY,
     student_id    INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
     submitted_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-    review        TEXT,  -- ← поле для рецензии (пока NULL)
+    review        TEXT,
     status        TEXT DEFAULT 'submitted',
     UNIQUE(student_id, assignment_id)
 );
 
--- Новая таблица: файлы работы
+-- Файлы работ
 CREATE TABLE IF NOT EXISTS submission_files (
     id            INTEGER PRIMARY KEY,
     submission_id INTEGER NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
@@ -51,20 +51,19 @@ CREATE TABLE IF NOT EXISTS submission_files (
 -- Успеваемость (итог по предмету)
 CREATE TABLE IF NOT EXISTS grades (
     id          INTEGER PRIMARY KEY,
-    student_id  INTEGER NOT NULL,
-    subject_id  INTEGER NOT NULL,
+    student_id  INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,  -- ← ИСПРАВЛЕНО
+    subject_id  INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     grade       INTEGER CHECK (grade BETWEEN 0 AND 100),
     status      TEXT DEFAULT 'не сдано',
+    review      TEXT,
     updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (student_id)  REFERENCES students(id) ON DELETE CASCADE,
-    FOREIGN KEY (subject_id)  REFERENCES subjects(id) ON DELETE CASCADE,
     UNIQUE(student_id, subject_id)
 );
 
 -- Преподаватели
 CREATE TABLE IF NOT EXISTS teachers (
     id         INTEGER PRIMARY KEY,
-    teacher_id TEXT NOT NULL UNIQUE,  -- например: T-MATH-01
+    teacher_id TEXT NOT NULL UNIQUE,
     last_name  TEXT NOT NULL,
     first_name TEXT NOT NULL,
     patronymic TEXT,

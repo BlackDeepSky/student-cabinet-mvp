@@ -137,7 +137,7 @@ async def get_grades(student_id: str):
 async def submit_work(
     assignment_id: int,
     student_id: str = Form(...),
-    files: list[UploadFile] = File(...)  # ← принимаем список файлов
+    files: list[UploadFile] = File(...)  # ← теперь список!
 ):
     if not files or all(f.filename == "" for f in files):
         raise HTTPException(400, "Не выбраны файлы")
@@ -214,7 +214,7 @@ async def get_teacher_assignments(teacher_id: str):
             raise HTTPException(404, "Преподаватель не найден")
         teacher_id_int = teacher_row[0]
 
-        # Получаем все задания по его предметам + отправленные работы
+        # Получаем все работы студентов по предметам, которые ведёт преподаватель
         cur = conn.execute("""
             SELECT
                 a.id AS assignment_id,
@@ -223,24 +223,33 @@ async def get_teacher_assignments(teacher_id: str):
                 s.name AS subject,
                 st.last_name || ' ' || st.first_name AS student_name,
                 st.student_id,
-                sub.file_path,
                 sub.submitted_at,
                 gr.grade,
                 gr.status
             FROM assignments a
             JOIN subjects s ON a.subject_id = s.id
             JOIN subject_teachers st_link ON s.id = st_link.subject_id
-            JOIN students st ON st.id IN (
-                SELECT DISTINCT student_id FROM submissions WHERE assignment_id = a.id
-            )
-            LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.student_id = st.id
+            JOIN submissions sub ON sub.assignment_id = a.id
+            JOIN students st ON sub.student_id = st.id
             LEFT JOIN grades gr ON gr.student_id = st.id AND gr.subject_id = s.id
             WHERE st_link.teacher_id = ?
-            AND (gr.status IS NULL OR gr.status != 'зачёт')  -- ← ИСКЛЮЧАЕМ "зачёт"
+              AND (gr.status IS NULL OR gr.status != 'зачёт')
             ORDER BY a.deadline DESC, st.last_name
         """, (teacher_id_int,))
 
-        assignments = [dict(row) for row in cur.fetchall()]
+        assignments = []
+        for row in cur.fetchall():
+            assignments.append({
+                "assignment_id": row["assignment_id"],
+                "subject": row["subject"],
+                "title": row["title"],
+                "deadline": row["deadline"],
+                "student_name": row["student_name"],
+                "student_id": row["student_id"],
+                "submitted_at": row["submitted_at"],
+                "grade": row["grade"],
+                "status": row["status"]
+            })
         return assignments
     
 @app.post("/api/teacher/grade")
@@ -249,27 +258,34 @@ async def set_grade(
     subject_name: str = Form(...),
     grade: Optional[int] = Form(None),
     status: str = Form("не сдано"),
-    review: Optional[str] = Form(None)  # ← новое поле
+    review: Optional[str] = Form(None)
 ):
     with get_db() as conn:
-        # ... (получение ID, как раньше)
+        # Получаем ID студента
+        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (student_id,))
+        student_row = cur.fetchone()
+        if not student_row:
+            raise HTTPException(404, "Студент не найден")
+        student_id_int = student_row[0]
 
-        # Обновляем оценку
+        # Получаем ID предмета
+        cur = conn.execute("SELECT id FROM subjects WHERE name = ?", (subject_name,))
+        subject_row = cur.fetchone()
+        if not subject_row:
+            raise HTTPException(404, "Предмет не найден")
+        subject_id_int = subject_row[0]
+
+        # Вставляем или обновляем запись в grades
         conn.execute("""
-            INSERT INTO grades (student_id, subject_id, grade, status)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO grades (student_id, subject_id, grade, status, review)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(student_id, subject_id)
-            DO UPDATE SET grade = excluded.grade, status = excluded.status
-        """, (student_id_int, subject_id_int, grade, status))
-
-        # Обновляем рецензию в submissions
-        conn.execute("""
-            UPDATE submissions
-            SET review = ?
-            WHERE student_id = ? AND assignment_id IN (
-                SELECT id FROM assignments WHERE subject_id = ?
-            )
-        """, (review, student_id_int, subject_id_int))
+            DO UPDATE SET 
+                grade = excluded.grade,
+                status = excluded.status,
+                review = excluded.review,
+                updated_at = CURRENT_TIMESTAMP
+        """, (student_id_int, subject_id_int, grade, status, review))
 
         return {"message": "Оценка и рецензия сохранены"}
     

@@ -6,8 +6,9 @@
   <title>Кабинет преподавателя</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    .file-link { font-size: 0.9em; }
-    .grade-form { margin-top: 8px; }
+    .file-link { font-size: 0.9em; display: inline-block; margin-right: 12px; }
+    .grade-form { margin-top: 12px; }
+    .review-text { font-style: italic; color: #495057; margin-top: 4px; }
   </style>
 </head>
 <body class="bg-light">
@@ -94,11 +95,23 @@
         return;
       }
 
-      submissions.forEach(sub => {
+      // Загружаем файлы для каждой работы
+      for (const sub of submissions) {
         const deadline = new Date(sub.deadline).toLocaleDateString('ru-RU');
         const submittedAt = sub.submitted_at ? new Date(sub.submitted_at).toLocaleString('ru-RU') : '—';
-        const filePath = sub.file_path.replace(/^storage\//, '');
-        const fileUrl = sub.file_path ? `/download/${filePath}` : null;
+
+        // Запрашиваем файлы для этой работы
+        const filesRes = await fetch(`/api/teacher/files/${sub.assignment_id}/${sub.student_id}`);
+        const files = await filesRes.json();
+
+        let fileLinks = '';
+        if (files.length > 0) {
+          fileLinks = files.map(f => 
+            `<a href="/download/${f.path}" class="file-link" download="${f.name}">📎 ${f.name}</a>`
+          ).join('');
+        } else {
+          fileLinks = '<span class="text-muted">Файлы не загружены</span>';
+        }
 
         const card = document.createElement('div');
         card.className = 'card mb-3';
@@ -108,12 +121,9 @@
             <p><strong>Студент:</strong> ${sub.student_name} (${sub.student_id})</p>
             <p><small>Дедлайн: ${deadline}</small></p>
             <p><small>Отправлено: ${submittedAt}</small></p>
-            ${fileUrl ? 
-              `<p><a href="${fileUrl}" class="file-link" target="_blank">📎 Скачать работу</a></p>` : 
-              '<p class="text-muted">Файл не найден</p>'
-            }
-            <form class="grade-form" data-student-id="${sub.student_id}" data-subject="${sub.subject}">
-              <div class="row">
+            <p>${fileLinks}</p>
+            <form class="grade-form" data-student-id="${sub.student_id}" data-subject="${sub.subject}" data-assignment-id="${sub.assignment_id}">
+              <div class="row mb-2">
                 <div class="col-md-4">
                   <input type="number" class="form-control form-control-sm" placeholder="Оценка (0-100)" min="0" max="100">
                 </div>
@@ -129,11 +139,16 @@
                   <button type="submit" class="btn btn-success btn-sm">Сохранить</button>
                 </div>
               </div>
+              <div class="row">
+                <div class="col-12">
+                  <textarea class="form-control form-control-sm" placeholder="Рецензия (необязательно)"></textarea>
+                </div>
+              </div>
             </form>
           </div>
         `;
         cont.appendChild(card);
-      });
+      }
 
       // Обработчики сохранения оценок
       document.querySelectorAll('.grade-form').forEach(form => {
@@ -143,15 +158,18 @@
           const subject = e.target.dataset.subject;
           const gradeInput = e.target.querySelector('input');
           const statusSelect = e.target.querySelector('select');
+          const reviewTextarea = e.target.querySelector('textarea');
           
           const grade = gradeInput.value ? parseInt(gradeInput.value) : null;
           const status = statusSelect.value;
+          const review = reviewTextarea.value.trim() || '';
 
           const formData = new FormData();
           formData.append('student_id', studentId);
           formData.append('subject_name', subject);
           if (grade !== null) formData.append('grade', grade);
           formData.append('status', status);
+          if (review) formData.append('review', review);
 
           const res = await fetch('/api/teacher/grade', {
             method: 'POST',
@@ -159,7 +177,9 @@
           });
 
           if (res.ok) {
-            alert('Оценка сохранена!');
+            alert('Оценка и рецензия сохранены!');
+            // Обновим список (работа со статусом "зачёт" исчезнет)
+            loadSubmissions();
           } else {
             alert('Ошибка при сохранении');
           }

@@ -1,19 +1,46 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Виртуальное окружение (самое важное!)
+venv/
+ENV/
 .env
+.venv
 
-# IDE
-.vscode/
-.idea/
-
-# Файлы загрузок (их не коммитим!)
-storage/submissions/
-
-# SQLite DB (локальная копия — не в репо)
+# SQLite база данных
 instance/
 *.db
+*.sqlite
 
-# ОС
+# Файлы загрузок (работы студентов)
+storage/submissions/
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
+
+# ОС
+*.log

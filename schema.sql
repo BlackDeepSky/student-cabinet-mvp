@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
     submitted_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     review        TEXT,
-    status        TEXT DEFAULT 'submitted',
+    status        TEXT DEFAULT 'submitted' CHECK (status IN ('submitted', 'in_review', 'rejected', 'approved')),
     UNIQUE(student_id, assignment_id)
 );
 

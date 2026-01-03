@@ -6,7 +6,18 @@
   <title>Кабинет студента</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    .submitted-badge { margin-left: 8px; }
+    .submitted-badge { margin-left: 8px; font-size: 0.85em; }
+    .status-badge {
+      font-size: 0.85em;
+      padding: 0.25em 0.5em;
+      border-radius: 0.25rem;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .status-submitted { background-color: #6c757d; color: white; } /* серый */
+    .status-in_review { background-color: #ffc107; color: #212529; } /* оранжевый */
+    .status-approved { background-color: #28a745; color: white; } /* зелёный */
+    .status-rejected { background-color: #dc3545; color: white; } /* красный */
   </style>
 </head>
 <body class="bg-light">
@@ -98,24 +109,55 @@
       const cont = document.getElementById('assignments');
       cont.innerHTML = '';
       assignments.forEach(a => {
+        const deadline = new Date(a.deadline).toLocaleDateString('ru-RU');
+        const submittedAt = a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('ru-RU') : null;
+        const fileUrl = a.file_path ? `/download/${a.file_path.replace(/^storage\//, '')}` : null;
+
+        // Определяем статус и дату
+        let statusBadge = '';
+        let canSubmit = true;
+        let statusDate = submittedAt;
+
+        if (a.status) {
+          const dateStr = statusDate ? ` (${statusDate})` : '';
+          switch(a.status) {
+            case 'submitted':
+              statusBadge = `<span class="status-badge status-submitted">Отправлено${dateStr}</span>`;
+              break;
+            case 'in_review':
+              statusBadge = `<span class="status-badge status-in_review">На рассмотрении${dateStr}</span>`;
+              canSubmit = false;
+              break;
+            case 'approved':
+              statusBadge = `<span class="status-badge status-approved">Зачтено${dateStr}</span>`;
+              canSubmit = false;
+              break;
+            case 'rejected':
+              statusBadge = `<span class="status-badge status-rejected">Не зачтено${dateStr}</span>`;
+              break;
+          }
+        }
+
         const el = document.createElement('div');
         el.className = 'card mb-3';
-        const deadline = new Date(a.deadline).toLocaleDateString('ru-RU');
         el.innerHTML = `
           <div class="card-body">
-            <h6 class/${a.subject}</h6>
+            <h6 class="text-muted">${a.subject}</h6>
             <p class="text-muted mb-2">Преподаватель: ${a.teachers}</p>
-            <h5>${a.title}</h5>
+            <h5>${a.title} ${statusBadge}</h5>
             <p>${a.description}</p>
             <p><small>Дедлайн: ${deadline}</small></p>
-            ${a.submitted 
-              ? '<span class="badge bg-success submitted-badge">Отправлено</span>' 
-              : `
-                <form class="submit-form" data-assignment-id="${a.id}">
-                  <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
-                  <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
-                </form>
-              `}
+            ${fileUrl ? 
+              `<p><a href="${fileUrl}" class="file-link" download="${fileUrl.split('/').pop()}">📎 Скачать работу</a></p>` : 
+              ''
+            }
+            ${canSubmit ? 
+              `<form class="submit-form" data-assignment-id="${a.id}">
+                <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
+                <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+              </form>` : 
+              '<p class="text-muted">Отправка запрещена</p>'
+            }
           </div>
         `;
         cont.appendChild(el);
@@ -127,13 +169,13 @@
           e.preventDefault();
           const assignmentId = e.target.dataset.assignmentId;
           const fileInput = e.target.querySelector('input[type="file"]');
-          const files = Array.from(fileInput.files); // ← массив файлов
+          const files = Array.from(fileInput.files);
           if (!files.length) return;
 
           const formData = new FormData();
           formData.append('student_id', currentStudentId);
           files.forEach(file => {
-              formData.append('files', file); // ← имя параметра должно совпадать с app.py
+            formData.append('files', file);
           });
 
           const res = await fetch(`/api/submit/${assignmentId}`, {
@@ -159,7 +201,7 @@
       tbody.innerHTML = '';
       grades.forEach(g => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${g.subject}</td><td>${g.grade || '–'}</td><td>${g.status}</td>`;
+        tr.innerHTML = `<td>${g.subject}</td><td>${g.grade || '–'}</td><td>${g.status || '–'}</td>`;
         tbody.appendChild(tr);
       });
     }

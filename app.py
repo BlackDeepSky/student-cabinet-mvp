@@ -256,8 +256,8 @@ async def get_teacher_assignments(teacher_id: str):
 async def set_grade(
     student_id: str = Form(...),
     subject_name: str = Form(...),
-    grade: Optional[int] = Form(None),
-    status: str = Form("не сдано"),
+    assignment_id: int = Form(...),  # ← добавили assignment_id!
+    status_input: str = Form(...),   # ← переименовали, чтобы не путать
     review: Optional[str] = Form(None)
 ):
     with get_db() as conn:
@@ -275,19 +275,25 @@ async def set_grade(
             raise HTTPException(404, "Предмет не найден")
         subject_id_int = subject_row[0]
 
-        # Вставляем или обновляем запись в grades
-        conn.execute("""
-            INSERT INTO grades (student_id, subject_id, grade, status, review)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(student_id, subject_id)
-            DO UPDATE SET 
-                grade = excluded.grade,
-                status = excluded.status,
-                review = excluded.review,
-                updated_at = CURRENT_TIMESTAMP
-        """, (student_id_int, subject_id_int, grade, status, review))
+        # Сопоставляем внешний статус → внутренний
+        status_mapping = {
+            "зачёт": "approved",
+            "сдано": "approved",
+            "не зачтено": "rejected",
+            "не допущен": "rejected",
+            "не сдано": "rejected",
+            "принят на рассмотрение": "in_review"
+        }
+        db_status = status_mapping.get(status_input, "submitted")
 
-        return {"message": "Оценка и рецензия сохранены"}
+        # Обновляем СТАТУС ИМЕННО ТОЙ РАБОТЫ, которую проверяет преподаватель
+        conn.execute("""
+            UPDATE submissions
+            SET status = ?, review = ?
+            WHERE student_id = ? AND assignment_id = ?
+        """, (db_status, review, student_id_int, assignment_id))
+
+        return {"message": f"Статус обновлён на: {db_status}"}
     
 @app.get("/download/{path:path}")
 async def download_file(path: str):
@@ -331,3 +337,25 @@ async def get_submission_files(assignment_id: int, student_id: str):
             name = os.path.basename(path)
             files.append({"path": path.replace("storage/", ""), "name": name})
         return files
+    
+@app.post("/api/teacher/review/{assignment_id}/{student_id}")
+async def start_review(assignment_id: int, student_id: str):
+    """Преподаватель принимает работу на рассмотрение"""
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT st.id
+            FROM students st
+            JOIN submissions sub ON st.id = sub.student_id
+            WHERE st.student_id = ? AND sub.assignment_id = ?
+        """, (student_id, assignment_id))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Работа не найдена")
+
+        conn.execute("""
+            UPDATE submissions
+            SET status = 'in_review'
+            WHERE student_id = ? AND assignment_id = ?
+        """, (row[0], assignment_id))
+
+        return {"message": "Работа принята на рассмотрение"}

@@ -64,9 +64,6 @@ async def login(student_id: str = Form(...)):
 
 @app.get("/api/assignments/{student_id}")
 async def get_assignments(student_id: str):
-    """
-    Возвращает список заданий для студента, включая преподавателей по предметам.
-    """
     with get_db() as conn:
         # Получаем ID студента
         cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (student_id,))
@@ -75,46 +72,90 @@ async def get_assignments(student_id: str):
             raise HTTPException(404, "Студент не найден")
         student_id_int = student_row[0]
 
-        # Получаем задания + предмет + преподаватели
+        # Получаем ВСЕ задания
         cur = conn.execute("""
             SELECT
                 a.id,
                 a.title,
                 a.description,
                 a.deadline,
-                s.name AS subject,
+                s.id AS subject_id,
+                s.name AS subject
+            FROM assignments a
+            JOIN subjects s ON a.subject_id = s.id
+            ORDER BY a.deadline
+        """)
+        assignments_raw = cur.fetchall()
+
+        # Получаем статусы работ студента
+        cur = conn.execute("""
+            SELECT
+                assignment_id,
+                status,
+                submitted_at,
+                review
+            FROM submissions
+            WHERE student_id = ?
+        """, (student_id_int,))
+        submission_map = {}
+        for row in cur.fetchall():
+            submission_map[row["assignment_id"]] = {
+                "status": row["status"],
+                "submitted_at": row["submitted_at"],
+                "review": row["review"]
+            }
+
+        # Получаем наличие файлов
+        cur = conn.execute("""
+            SELECT DISTINCT s.assignment_id
+            FROM submissions s
+            JOIN submission_files sf ON sf.submission_id = s.id
+            WHERE s.student_id = ?
+        """, (student_id_int,))
+        has_files_set = {row[0] for row in cur.fetchall()}
+
+        # Получаем преподавателей по предметам
+        cur = conn.execute("""
+            SELECT
+                s.id AS subject_id,
                 GROUP_CONCAT(
-                    t.last_name || ' ' || substr(t.first_name, 1, 1) || '.'
-                    || CASE WHEN t.patronymic IS NOT NULL 
+                    t.last_name || ' ' || substr(t.first_name, 1, 1) || '.' ||
+                    CASE WHEN t.patronymic IS NOT NULL 
                         THEN substr(t.patronymic, 1, 1) || '.' 
                         ELSE '' END,
                     ', '
                 ) AS teachers
-            FROM assignments a
-            JOIN subjects s ON a.subject_id = s.id
-            LEFT JOIN subject_teachers st_link ON s.id = st_link.subject_id
-            LEFT JOIN teachers t ON st_link.teacher_id = t.id
-            LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.student_id = ?
-            GROUP BY a.id, s.name
-            ORDER BY a.deadline
-        """, (student_id_int,))
-
-        assignments = []
+            FROM subjects s
+            JOIN subject_teachers st_link ON s.id = st_link.subject_id
+            JOIN teachers t ON st_link.teacher_id = t.id
+            GROUP BY s.id
+        """)
+        teacher_map = {}
         for row in cur.fetchall():
-            teachers = row["teachers"]
-            # Если нет преподавателей — покажем "—"
-            if not teachers or teachers == "NULL":
-                teachers = "—"
+            teacher_map[row["subject_id"]] = row["teachers"]
+
+        # Собираем итоговый список
+        assignments = []
+        for a in assignments_raw:
+            subject_id = a["subject_id"]
+            teachers = teacher_map.get(subject_id) or "—"
+
+            sub = submission_map.get(a["id"]) or {}
+            has_files = a["id"] in has_files_set
 
             assignments.append({
-                "id": row["id"],
-                "subject": row["subject"],
-                "teachers": teachers,  # ← добавлено
-                "title": row["title"],
-                "description": row["description"],
-                "deadline": row["deadline"],
-                "submitted": False  # мы не проверяем submitted здесь — оставим как раньше
+                "id": a["id"],
+                "subject": a["subject"],
+                "teachers": teachers,
+                "title": a["title"],
+                "description": a["description"],
+                "deadline": a["deadline"],
+                "status": sub.get("status"),
+                "submitted_at": sub.get("submitted_at"),
+                "review": sub.get("review"),
+                "has_files": has_files
             })
+
         return assignments
 
 @app.get("/api/grades/{student_id}")

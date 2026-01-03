@@ -55,7 +55,14 @@
 
       <h3 class="mt-5">Успеваемость</h3>
       <table class="table table-bordered">
-        <thead><tr><th>Предмет</th><th>Оценка</th><th>Статус</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Предмет</th>
+            <th>Оценка</th>
+            <th>Статус</th>
+            <th>Дата и время</th>
+          </tr>
+        </thead>
         <tbody id="grades"></tbody>
       </table>
     </div>
@@ -206,7 +213,12 @@
       tbody.innerHTML = '';
       grades.forEach(g => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${g.subject}</td><td>${g.grade || '–'}</td><td>${g.status || '–'}</td>`;
+        tr.innerHTML = `
+          <td>${g.subject}</td>
+          <td>${g.grade || '–'}</td>
+          <td>${g.status || '–'}</td>
+          <td>${g.graded_at || '—'}</td>
+        `;
         tbody.appendChild(tr);
       });
     }

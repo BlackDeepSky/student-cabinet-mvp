@@ -51,12 +51,12 @@ CREATE TABLE IF NOT EXISTS submission_files (
 -- Успеваемость (итог по предмету)
 CREATE TABLE IF NOT EXISTS grades (
     id          INTEGER PRIMARY KEY,
-    student_id  INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,  -- ← ИСПРАВЛЕНО
+    student_id  INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     subject_id  INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     grade       INTEGER CHECK (grade BETWEEN 0 AND 100),
     status      TEXT DEFAULT 'не сдано',
     review      TEXT,
-    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    graded_at   DATETIME DEFAULT CURRENT_TIMESTAMP,  -- ← НОВОЕ ПОЛЕ
     UNIQUE(student_id, subject_id)
 );
 

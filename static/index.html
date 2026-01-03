@@ -6,7 +6,6 @@
   <title>Кабинет студента</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    .submitted-badge { margin-left: 8px; font-size: 0.85em; }
     .status-badge {
       font-size: 0.85em;
       padding: 0.25em 0.5em;
@@ -18,6 +17,14 @@
     .status-in_review { background-color: #ffc107; color: #212529; } /* оранжевый */
     .status-approved { background-color: #28a745; color: white; } /* зелёный */
     .status-rejected { background-color: #dc3545; color: white; } /* красный */
+    .review-block {
+      background-color: #f8d7da;
+      border-left: 4px solid #dc3545;
+      padding: 0.75rem;
+      margin-top: 0.75rem;
+      font-size: 0.95em;
+      border-radius: 0.25rem;
+    }
   </style>
 </head>
 <body class="bg-light">
@@ -36,18 +43,16 @@
       </form>
     </div>
 
-    <!-- Основной интерфейс (скрыт до входа) -->
+    <!-- Основной интерфейс -->
     <div id="main-section" style="display:none;">
       <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Добро пожаловать, <span id="student-name"></span>!</h2>
         <button id="logout-btn" class="btn btn-outline-secondary">Выйти</button>
       </div>
 
-      <!-- Задания -->
       <h3>Задания</h3>
       <div id="assignments"></div>
 
-      <!-- Успеваемость -->
       <h3 class="mt-5">Успеваемость</h3>
       <table class="table table-bordered">
         <thead><tr><th>Предмет</th><th>Оценка</th><th>Статус</th></tr></thead>
@@ -59,7 +64,6 @@
   <script>
     let currentStudentId = localStorage.getItem('student_id');
 
-    // Показать/скрыть секции
     function showLogin() {
       document.getElementById('login-section').style.display = 'block';
       document.getElementById('main-section').style.display = 'none';
@@ -108,18 +112,16 @@
       const assignments = await res.json();
       const cont = document.getElementById('assignments');
       cont.innerHTML = '';
+
       assignments.forEach(a => {
         const deadline = new Date(a.deadline).toLocaleDateString('ru-RU');
         const submittedAt = a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('ru-RU') : null;
-        const fileUrl = a.file_path ? `/download/${a.file_path.replace(/^storage\//, '')}` : null;
 
-        // Определяем статус и дату
+        // Статус с датой
         let statusBadge = '';
         let canSubmit = true;
-        let statusDate = submittedAt;
-
         if (a.status) {
-          const dateStr = statusDate ? ` (${statusDate})` : '';
+          const dateStr = submittedAt ? ` (${submittedAt})` : '';
           switch(a.status) {
             case 'submitted':
               statusBadge = `<span class="status-badge status-submitted">Отправлено${dateStr}</span>`;
@@ -138,6 +140,12 @@
           }
         }
 
+        // Рецензия (только для "не зачтено")
+        let reviewBlock = '';
+        if (a.status === 'rejected' && a.review) {
+          reviewBlock = `<div class="review-block"><strong>Рецензия:</strong> ${a.review}</div>`;
+        }
+
         const el = document.createElement('div');
         el.className = 'card mb-3';
         el.innerHTML = `
@@ -147,16 +155,13 @@
             <h5>${a.title} ${statusBadge}</h5>
             <p>${a.description}</p>
             <p><small>Дедлайн: ${deadline}</small></p>
-            ${fileUrl ? 
-              `<p><a href="${fileUrl}" class="file-link" download="${fileUrl.split('/').pop()}">📎 Скачать работу</a></p>` : 
-              ''
-            }
+            ${reviewBlock}
             ${canSubmit ? 
               `<form class="submit-form" data-assignment-id="${a.id}">
                 <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
                 <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
               </form>` : 
-              '<p class="text-muted">Отправка запрещена</p>'
+              '<p class="text-muted">Работа проверяется преподавателем</p>'
             }
           </div>
         `;
@@ -184,10 +189,10 @@
           });
           if (res.ok) {
             alert('Работа отправлена!');
-            loadAssignments(); // обновим статус
+            loadAssignments();
           } else {
             const error = await res.json().catch(() => ({detail: 'Ошибка отправки'}));
-            alert('Ошибка: ' + (error.detail || error.message || 'Неизвестная ошибка'));
+            alert('Ошибка: ' + (error.detail || 'Неизвестная ошибка'));
           }
         });
       });
@@ -208,7 +213,6 @@
 
     // Инициализация
     if (currentStudentId) {
-      // Попробуем восстановить сессию
       fetch(`/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

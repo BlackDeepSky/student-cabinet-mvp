@@ -122,26 +122,36 @@
             <p><small>Дедлайн: ${deadline}</small></p>
             <p><small>Отправлено: ${submittedAt}</small></p>
             <p>${fileLinks}</p>
-            <form class="grade-form" data-student-id="${sub.student_id}" data-subject="${sub.subject}" data-assignment-id="${sub.assignment_id}">
+            <form class="grade-form" 
+                  data-student-id="${sub.student_id}" 
+                  data-subject="${sub.subject}" 
+                  data-assignment-id="${sub.assignment_id}">
+              <input type="hidden" name="assignment_id" value="${sub.assignment_id}">
+              <input type="hidden" name="subject_name" value="${sub.subject}">
               <div class="row mb-2">
                 <div class="col-md-4">
-                  <input type="number" class="form-control form-control-sm" placeholder="Оценка (0-100)" min="0" max="100">
+                  <button type="button" class="btn btn-warning btn-sm w-100" 
+                          onclick="handleStatus(this, 'принят на рассмотрение')">
+                    Принят на рассмотрение
+                  </button>
                 </div>
                 <div class="col-md-4">
-                  <select class="form-select form-select-sm">
-                    <option value="не сдано">не сдано</option>
-                    <option value="сдано">сдано</option>
-                    <option value="зачёт">зачёт</option>
-                    <option value="не допущен">не допущен</option>
-                  </select>
+                  <button type="button" class="btn btn-success btn-sm w-100" 
+                          onclick="handleStatus(this, 'зачёт')">
+                    Зачтено
+                  </button>
                 </div>
                 <div class="col-md-4">
-                  <button type="submit" class="btn btn-success btn-sm">Сохранить</button>
+                  <button type="button" class="btn btn-danger btn-sm w-100" 
+                          onclick="handleStatus(this, 'не зачтено')">
+                    Не зачтено
+                  </button>
                 </div>
               </div>
-              <div class="row">
+              <div class="row mt-2">
                 <div class="col-12">
-                  <textarea class="form-control form-control-sm" placeholder="Рецензия (необязательно)"></textarea>
+                  <textarea class="form-control form-control-sm" 
+                            placeholder="Рецензия (необязательно)"></textarea>
                 </div>
               </div>
             </form>
@@ -149,42 +159,35 @@
         `;
         cont.appendChild(card);
       }
+    }
 
-      // Обработчики сохранения оценок
-      document.querySelectorAll('.grade-form').forEach(form => {
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const studentId = e.target.dataset.studentId;
-          const subject = e.target.dataset.subject;
-          const gradeInput = e.target.querySelector('input');
-          const statusSelect = e.target.querySelector('select');
-          const reviewTextarea = e.target.querySelector('textarea');
-          
-          const grade = gradeInput.value ? parseInt(gradeInput.value) : null;
-          const status = statusSelect.value;
-          const review = reviewTextarea.value.trim() || '';
+    // Обработчик нажатия на кнопку статуса
+    async function handleStatus(button, statusText) {
+      const form = button.closest('.grade-form');
+      const studentId = form.dataset.studentId;
+      const subject = form.dataset.subject;
+      const assignmentId = form.dataset.assignmentId;
+      const review = form.querySelector('textarea').value.trim() || '';
 
-          const formData = new FormData();
-          formData.append('student_id', studentId);
-          formData.append('subject_name', subject);
-          if (grade !== null) formData.append('grade', grade);
-          formData.append('status', status);
-          if (review) formData.append('review', review);
+      const formData = new FormData();
+      formData.append('student_id', studentId);
+      formData.append('subject_name', subject);
+      formData.append('assignment_id', assignmentId);
+      formData.append('status_input', statusText);
+      if (review) formData.append('review', review);
 
-          const res = await fetch('/api/teacher/grade', {
-            method: 'POST',
-            body: formData
-          });
-
-          if (res.ok) {
-            alert('Оценка и рецензия сохранены!');
-            // Обновим список (работа со статусом "зачёт" исчезнет)
-            loadSubmissions();
-          } else {
-            alert('Ошибка при сохранении');
-          }
-        });
+      const res = await fetch('/api/teacher/grade', {
+        method: 'POST',
+        body: formData
       });
+
+      if (res.ok) {
+        alert(`Статус обновлён: ${statusText}`);
+        loadSubmissions(); // Обновляем список (работа с "зачтено" исчезнет)
+      } else {
+        const error = await res.json().catch(() => ({message: 'Ошибка'}));
+        alert('Ошибка: ' + (error.detail || error.message || 'Неизвестная ошибка'));
+      }
     }
 
     // Инициализация

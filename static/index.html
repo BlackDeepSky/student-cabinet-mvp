@@ -126,7 +126,6 @@
 
         // Статус с датой
         let statusBadge = '';
-        let canSubmit = true;
         if (a.status) {
           const dateStr = submittedAt ? ` (${submittedAt})` : '';
           switch(a.status) {
@@ -135,11 +134,9 @@
               break;
             case 'in_review':
               statusBadge = `<span class="status-badge status-in_review">На рассмотрении${dateStr}</span>`;
-              canSubmit = false;
               break;
             case 'approved':
               statusBadge = `<span class="status-badge status-approved">Зачтено${dateStr}</span>`;
-              canSubmit = false;
               break;
             case 'rejected':
               statusBadge = `<span class="status-badge status-rejected">Не зачтено${dateStr}</span>`;
@@ -153,6 +150,24 @@
           reviewBlock = `<div class="review-block"><strong>Рецензия:</strong> ${a.review}</div>`;
         }
 
+        // Действие под заданием
+        let actionBlock = '';
+        if (a.status === 'approved') {
+          // Работа зачтена — ничего не показываем
+          actionBlock = '';
+        } else if (a.status === 'in_review') {
+          // На проверке
+          actionBlock = '<p class="text-muted">Работа проверяется преподавателем</p>';
+        } else {
+          // submitted или rejected — можно отправлять
+          actionBlock = `
+            <form class="submit-form" data-assignment-id="${a.id}">
+              <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
+              <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+            </form>
+          `;
+        }
+
         const el = document.createElement('div');
         el.className = 'card mb-3';
         el.innerHTML = `
@@ -163,13 +178,7 @@
             <p>${a.description}</p>
             <p><small>Дедлайн: ${deadline}</small></p>
             ${reviewBlock}
-            ${canSubmit ? 
-              `<form class="submit-form" data-assignment-id="${a.id}">
-                <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
-                <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
-              </form>` : 
-              '<p class="text-muted">Работа проверяется преподавателем</p>'
-            }
+            ${actionBlock}
           </div>
         `;
         cont.appendChild(el);

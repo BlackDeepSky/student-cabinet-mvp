@@ -301,21 +301,50 @@ async def set_grade(
 ):
     """Выставить оценку/статус и сохранить рецензию"""
     with get_db() as conn:
-        # ID студента
+        # Получаем ID студента
         cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (student_id,))
         student_row = cur.fetchone()
         if not student_row:
             raise HTTPException(404, "Студент не найден")
         student_id_int = student_row[0]
 
-        # ID предмета
+        # Получаем ID предмета
         cur = conn.execute("SELECT id FROM subjects WHERE name = ?", (subject_name,))
         subject_row = cur.fetchone()
         if not subject_row:
             raise HTTPException(404, "Предмет не найден")
         subject_id_int = subject_row[0]
 
-        # Статус для submissions
+        # Если статус = "не зачтено" — удаляем старые файлы
+        if status_input == "не зачтено":
+            # Получаем ID работы
+            cur = conn.execute("""
+                SELECT s.id
+                FROM submissions s
+                WHERE s.student_id = ? AND s.assignment_id = ?
+            """, (student_id_int, assignment_id))
+            submission_row = cur.fetchone()
+            if submission_row:
+                submission_id = submission_row[0]
+
+                # Получаем пути к файлам
+                cur = conn.execute("""
+                    SELECT file_path FROM submission_files WHERE submission_id = ?
+                """, (submission_id,))
+                file_paths = [row[0] for row in cur.fetchall()]
+
+                # Удаляем файлы из файловой системы
+                for fp in file_paths:
+                    try:
+                        os.remove(fp)
+                        print(f"🗑️ Удалён файл: {fp}")
+                    except OSError as e:
+                        print(f"⚠️ Не удалось удалить {fp}: {e}")
+
+                # Удаляем записи из базы
+                conn.execute("DELETE FROM submission_files WHERE submission_id = ?", (submission_id,))
+
+        # Сопоставляем статус
         status_mapping = {
             "зачёт": "approved",
             "сдано": "approved",
@@ -326,16 +355,15 @@ async def set_grade(
         }
         db_status = status_mapping.get(status_input, "submitted")
 
-        # Обновляем submissions
+        # Обновляем статус работы
         conn.execute("""
             UPDATE submissions
             SET status = ?, review = ?
             WHERE student_id = ? AND assignment_id = ?
         """, (db_status, review, student_id_int, assignment_id))
 
-        # Обновляем grades с датой
+        # Обновляем итоговую оценку (grades)
         grade_value = 100 if status_input in ("зачёт", "сдано") else None
-
         conn.execute("""
             INSERT INTO grades (student_id, subject_id, grade, status, review, graded_at)
             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -347,7 +375,7 @@ async def set_grade(
                 graded_at = excluded.graded_at
         """, (student_id_int, subject_id_int, grade_value, status_input, review))
 
-        return {"message": "Статус и рецензия сохранены"}
+        return {"message": "Статус обновлён, старые файлы удалены."}
 
 # ===== СКАЧИВАНИЕ ФАЙЛОВ =====
 

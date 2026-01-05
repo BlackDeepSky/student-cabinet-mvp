@@ -21,6 +21,13 @@ UPLOAD_BASE_DIR = "storage/submissions"
 Path("instance").mkdir(exist_ok=True)
 Path(UPLOAD_BASE_DIR).mkdir(parents=True, exist_ok=True)
 
+# === Автоматическая инициализация БД при старте (для Render) ===
+if not os.path.exists(DB_PATH):
+    print("База данных не найдена. Инициализирую...")
+    from seed_data import seed_data
+    seed_data()
+# ============================================================
+
 # Вспомогательная функция подключения к БД
 def get_db():
     conn = sqlite3.connect(DB_PATH)

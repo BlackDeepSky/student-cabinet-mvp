@@ -22,24 +22,11 @@ Path("instance").mkdir(exist_ok=True)
 Path(UPLOAD_BASE_DIR).mkdir(parents=True, exist_ok=True)
 
 # === Автоматическая инициализация БД при старте (для Render) ===
-def init_database_if_needed():
-    """Инициализирует БД, если таблица students отсутствует"""
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("SELECT 1 FROM students LIMIT 1")
-        print("✅ База данных уже инициализирована.")
-    except sqlite3.OperationalError:
-        print("🔵 Таблица students не найдена. Инициализирую БД...")
-        try:
-            from seed_data import seed_data
-            seed_data()
-            print("✅ База успешно создана.")
-        except Exception as e:
-            print(f"❌ Ошибка при инициализации: {e}")
-            raise
-
-init_database_if_needed()
-# ============================================================
+# В app.py
+if not os.path.exists(DB_PATH):
+    print("🔵 БД отсутствует. Инициализирую...")
+    from seed_data import seed_data
+    seed_data()
 
 # Вспомогательная функция подключения к БД
 def get_db():

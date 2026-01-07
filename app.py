@@ -13,6 +13,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
+from datetime import datetime
 
 # === Константы ===
 DB_PATH = Path("instance/app.db")
@@ -57,6 +58,29 @@ def validate_id(user_id: str) -> str:
         raise HTTPException(400, "Некорректный идентификатор")
     return id_clean
 
+def normalize_birth_date(raw: str) -> Optional[str]:
+    """
+    Преобразует ввод пользователя в формат YYYY-MM-DD.
+    Поддерживаемые форматы: ДД.ММ.ГГГГ, ДДММГГГГ, ДД-ММ-ГГГГ
+    Возвращает None, если формат неверный.
+    """
+    if not raw:
+        return None
+    raw = re.sub(r"[^\d]", "", raw.strip())  # оставляем только цифры
+    if len(raw) == 8:  # ДДММГГГГ
+        day, month, year = raw[:2], raw[2:4], raw[4:]
+    elif len(raw) == 6:  # ДДММГГ → предполагаем 19 или 20 век
+        day, month, year = raw[:2], raw[2:4], "20" + raw[4:] if int(raw[4:]) <= 25 else "19" + raw[4:]
+    else:
+        return None
+
+    # Проверка валидности даты
+    try:
+        dt = datetime(int(year), int(month), int(day))
+        return dt.strftime("%Y-%m-%d")
+    except ValueError:
+        return None
+
 # === Приложение ===
 app = FastAPI()
 
@@ -78,17 +102,22 @@ async def teacher_page():
 # ===== СТУДЕНТ =====
 
 @app.post("/api/login")
-async def login(student_id: str = Form(...)):
+async def login(student_id: str = Form(...), password: str = Form(...)):
+    """Вход студента по student_id и дате рождения"""
     clean_id = validate_id(student_id)
+    birth_date = normalize_birth_date(password)
+    if not birth_date:
+        raise HTTPException(400, "Неверный формат даты рождения. Используйте ДД.ММ.ГГГГ")
+
     with get_db() as conn:
         cur = conn.execute("""
             SELECT id, last_name, first_name, patronymic
             FROM students
-            WHERE student_id = ?
-        """, (clean_id,))
+            WHERE student_id = ? AND birth_date = ?
+        """, (clean_id, birth_date))
         student = cur.fetchone()
         if not student:
-            raise HTTPException(404, "Студент не найден")
+            raise HTTPException(401, "Неверный номер студенческого или дата рождения")
         return dict(student)
 
 @app.post("/api/submit/{assignment_id}")
@@ -263,17 +292,22 @@ async def get_grades(student_id: str):
 # ===== ПРЕПОДАВАТЕЛЬ =====
 
 @app.post("/api/teacher/login")
-async def teacher_login(teacher_id: str = Form(...)):
+async def teacher_login(teacher_id: str = Form(...), password: str = Form(...)):
+    """Вход преподавателя по teacher_id и дате рождения"""
     clean_id = validate_id(teacher_id)
+    birth_date = normalize_birth_date(password)
+    if not birth_date:
+        raise HTTPException(400, "Неверный формат даты рождения. Используйте ДД.ММ.ГГГГ")
+
     with get_db() as conn:
         cur = conn.execute("""
             SELECT id, last_name, first_name, patronymic
             FROM teachers
-            WHERE teacher_id = ?
-        """, (clean_id,))
+            WHERE teacher_id = ? AND birth_date = ?
+        """, (clean_id, birth_date))
         teacher = cur.fetchone()
         if not teacher:
-            raise HTTPException(404, "Преподаватель не найден")
+            raise HTTPException(401, "Неверный ID преподавателя или дата рождения")
         return dict(teacher)
 
 @app.get("/api/teacher/assignments/{teacher_id}")

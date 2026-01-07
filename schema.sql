@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS students (
     patronymic   TEXT,
     email        TEXT UNIQUE,
     group_name   TEXT,
+    birth_date   TEXT,
     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS teachers (
     last_name  TEXT NOT NULL,
     first_name TEXT NOT NULL,
     patronymic TEXT,
+    birth_date TEXT,
     email      TEXT UNIQUE
 );
 

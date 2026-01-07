@@ -18,10 +18,13 @@
     <!-- Форма входа -->
     <div id="login-section" class="card p-4 mb-4">
       <h3>Вход</h3>
-      <p>Введите ваш ID преподавателя (например: T-MATH-01)</p>
+      <p>Введите ваш ID преподавателя и дату рождения</p>
       <form id="login-form">
         <div class="mb-3">
-          <input type="text" id="teacher-id" class="form-control" placeholder="ID преподавателя" required>
+          <input type="text" id="teacher-id" class="form-control" placeholder="ID преподавателя (например: T-MATH-01)" required>
+        </div>
+        <div class="mb-3">
+          <input type="password" id="password" class="form-control" placeholder="Дата рождения (ДД.ММ.ГГГГ)" required>
         </div>
         <button type="submit" class="btn btn-primary">Войти</button>
       </form>
@@ -55,15 +58,19 @@
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const teacherId = document.getElementById('teacher-id').value.trim();
-      if (!teacherId) return;
-
+      const password = document.getElementById('password').value.trim();
+      if (!teacherId || !password) return;
+    
       try {
         const res = await fetch('/api/teacher/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `teacher_id=${encodeURIComponent(teacherId)}`
+          body: `teacher_id=${encodeURIComponent(teacherId)}&password=${encodeURIComponent(password)}`
         });
-        if (!res.ok) throw new Error('Преподаватель не найден');
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({detail: 'Ошибка входа'}));
+          throw new Error(error.detail || 'Неверные данные');
+        }
         const teacher = await res.json();
         currentTeacherId = teacherId;
         localStorage.setItem('teacher_id', teacherId);

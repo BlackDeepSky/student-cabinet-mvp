@@ -31,25 +31,25 @@ def seed_data():
 
         # Студенты
         students = [
-            ("2023-IS-042", "Иванов", "Иван", "Иванович", "ivanov@example.com", "ИС-31"),
-            ("2023-IS-043", "Петрова", "Мария", "Сергеевна", "petrova@example.com", "ИС-31"),
-            ("2023-ЭК-115", "Сидоров", "Алексей", None, "sidorov@example.com", "ЭК-22"),
+            ("2023-IS-042", "Иванов", "Иван", "Иванович", "ivanov@example.com", "ИС-31", "2001-05-15"),
+            ("2023-IS-043", "Петрова", "Мария", "Сергеевна", "petrova@example.com", "ИС-31", "2002-11-23"),
+            ("2023-ЭК-115", "Сидоров", "Алексей", None, "sidorov@example.com", "ЭК-22", "2000-08-30"),
         ]
         cur.executemany("""
             INSERT OR IGNORE INTO students 
-            (student_id, last_name, first_name, patronymic, email, group_name)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (student_id, last_name, first_name, patronymic, email, group_name, birth_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, students)
 
         # Преподаватели
         teachers = [
-            ("T-MATH-01", "Смирнов", "Пётр", "Алексеевич", "smirnov@example.com"),
-            ("T-CS-02", "Козлова", "Елена", "Викторовна", "kozlova@example.com"),
+            ("T-MATH-01", "Смирнов", "Пётр", "Алексеевич", "smirnov@example.com", "1975-03-12"),
+            ("T-CS-02", "Козлова", "Елена", "Викторовна", "kozlova@example.com", "1982-07-19"),
         ]
         cur.executemany("""
             INSERT OR IGNORE INTO teachers 
-            (teacher_id, last_name, first_name, patronymic, email)
-            VALUES (?, ?, ?, ?, ?)
+            (teacher_id, last_name, first_name, patronymic, email, birth_date)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, teachers)
 
         # Предметы

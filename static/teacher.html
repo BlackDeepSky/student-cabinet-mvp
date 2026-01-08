@@ -5,10 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Кабинет преподавателя</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
-    .file-link { font-size: 0.9em; display: inline-block; margin-right: 12px; }
-    .grade-form { margin-top: 12px; }
-    .review-text { font-style: italic; color: #495057; margin-top: 4px; }
+    .status-badge {
+      font-size: 0.85em;
+      padding: 0.25em 0.5em;
+      border-radius: 0.25rem;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .status-in_review { background-color: #ffc107; color: #212529; } /* оранжевый */
+    .status-approved { background-color: #28a745; color: white; } /* зелёный */
+    .status-rejected { background-color: #dc3545; color: white; } /* красный */
+    .review-block {
+      background-color: #f8d7da;
+      border-left: 4  px solid #dc3545;
+      padding: 0.75rem;
+      margin-top: 0.75rem;
+      font-size: 0.95em;
+      border-radius: 0.25rem;
+    }
   </style>
 </head>
 <body class="bg-light">
@@ -33,15 +49,112 @@
     <!-- Основной интерфейс -->
     <div id="main-section" style="display:none;">
       <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Здравствуйте, <span id="teacher-name"></span>!</h2>
+        <h2>Добро пожаловать, <span id="teacher-name"></span>!</h2>
         <button id="logout-btn" class="btn btn-outline-secondary">Выйти</button>
       </div>
 
-      <h3>Отправленные работы</h3>
-      <div id="submissions"></div>
+      <!-- Кнопка истории -->
+      <div class="d-flex justify-content-between mb-3">
+        <h3>Работы студентов</h3>
+        <button id="show-history-btn" class="btn btn-outline-info">📜 История зачтённых</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-bordered">
+          <thead>
+            <tr>
+              <th>Студент</th>
+              <th>Предмет</th>
+              <th>Задание</th>
+              <th>Статус</th>
+              <th>Дата действия</th>
+              <th>Файлы</th>
+              <th>Оценка</th>
+            </tr>
+          </thead>
+          <tbody id="submissions"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
+  <!-- Модальное окно: выставление статуса -->
+  <div class="modal fade" id="gradeModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Выставить статус</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="grade-form">
+            <input type="hidden" id="modal-student-id">
+            <input type="hidden" id="modal-subject-name">
+            <input type="hidden" id="modal-assignment-id">
+            
+            <div class="mb-3">
+              <label class="form-label">Статус</label>
+              <select class="form-select" id="status-input" required>
+                <option value="принят на рассмотрение">Принят на рассмотрение</option>
+                <option value="зачёт">Зачёт</option>
+                <option value="не зачтено">Не зачтено</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Рецензия (если не зачтено)</label>
+              <textarea class="form-control" id="review" rows="3"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно: файлы -->
+  <div class="modal fade" id="filesModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Файлы работы</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="files-list">
+          <!-- Сюда подгружаются файлы -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно: история -->
+  <div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">История зачтённых работ</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="table-responsive">
+            <table class="table table-bordered">
+              <thead>
+                <tr>
+                  <th>Студент</th>
+                  <th>Предмет</th>
+                  <th>Задание</th>
+                  <th>Дата зачёта</th>
+                </tr>
+              </thead>
+              <tbody id="history-rows"></tbody>
+            </table>
+          </div>
+          <p class="text-muted text-center" id="history-empty" style="display:none;">Нет зачтённых работ</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let currentTeacherId = localStorage.getItem('teacher_id');
 
@@ -60,7 +173,7 @@
       const teacherId = document.getElementById('teacher-id').value.trim();
       const password = document.getElementById('password').value.trim();
       if (!teacherId || !password) return;
-    
+
       try {
         const res = await fetch('/api/teacher/login', {
           method: 'POST',
@@ -90,119 +203,202 @@
       showLogin();
     });
 
-    // Загрузка работ
+    // Загрузка работ (только актуальные)
     async function loadSubmissions() {
       const res = await fetch(`/api/teacher/assignments/${currentTeacherId}`);
       const submissions = await res.json();
-      const cont = document.getElementById('submissions');
-      cont.innerHTML = '';
+      const tbody = document.getElementById('submissions');
+      tbody.innerHTML = '';
 
-      if (submissions.length === 0) {
-        cont.innerHTML = '<p class="text-muted">Нет отправленных работ.</p>';
-        return;
-      }
-
-      // Загружаем файлы для каждой работы
-      for (const sub of submissions) {
-        const deadline = new Date(sub.deadline).toLocaleDateString('ru-RU');
-        const submittedAt = sub.submitted_at ? new Date(sub.submitted_at).toLocaleString('ru-RU') : '—';
-
-        // Запрашиваем файлы для этой работы
-        const filesRes = await fetch(`/api/teacher/files/${sub.assignment_id}/${sub.student_id}`);
-        const files = await filesRes.json();
-
-        let fileLinks = '';
-        if (files.length > 0) {
-          fileLinks = files.map(f => 
-            `<a href="/download/${f.path}" class="file-link" download="${f.name}">📎 ${f.name}</a>`
-          ).join('');
-        } else {
-          fileLinks = '<span class="text-muted">Файлы не загружены</span>';
+      submissions.forEach(row => {
+        let statusBadge = '';
+        if (row.last_status) {
+          const statusMap = {
+            'принят на рассмотрение': 'in_review',
+            'зачёт': 'approved',
+            'не зачтено': 'rejected'
+          };
+          const cls = statusMap[row.last_status] || '';
+          statusBadge = `<span class="status-badge status-${cls}">${row.last_status}</span>`;
         }
 
-        const card = document.createElement('div');
-        card.className = 'card mb-3';
-        card.innerHTML = `
-          <div class="card-body">
-            <h5>${sub.subject} — ${sub.title}</h5>
-            <p><strong>Студент:</strong> ${sub.student_name} (${sub.student_id})</p>
-            <p><small>Дедлайн: ${deadline}</small></p>
-            <p><small>Отправлено: ${submittedAt}</small></p>
-            <p>${fileLinks}</p>
-            <form class="grade-form" 
-                  data-student-id="${sub.student_id}" 
-                  data-subject="${sub.subject}" 
-                  data-assignment-id="${sub.assignment_id}">
-              <input type="hidden" name="assignment_id" value="${sub.assignment_id}">
-              <input type="hidden" name="subject_name" value="${sub.subject}">
-              <div class="row mb-2">
-                <div class="col-md-4">
-                  <button type="button" class="btn btn-warning btn-sm w-100" 
-                          onclick="handleStatus(this, 'принят на рассмотрение')">
-                    Принят на рассмотрение
-                  </button>
-                </div>
-                <div class="col-md-4">
-                  <button type="button" class="btn btn-success btn-sm w-100" 
-                          onclick="handleStatus(this, 'зачёт')">
-                    Зачтено
-                  </button>
-                </div>
-                <div class="col-md-4">
-                  <button type="button" class="btn btn-danger btn-sm w-100" 
-                          onclick="handleStatus(this, 'не зачтено')">
-                    Не зачтено
-                  </button>
-                </div>
-              </div>
-              <div class="row mt-2">
-                <div class="col-12">
-                  <textarea class="form-control form-control-sm" 
-                            placeholder="Рецензия (необязательно)"></textarea>
-                </div>
-              </div>
-            </form>
-          </div>
+        let lastAction = '—';
+        if (row.last_action_at) {
+          lastAction = new Date(row.last_action_at).toLocaleString('ru-RU');
+        } else if (row.submitted_at) {
+          lastAction = new Date(row.submitted_at).toLocaleString('ru-RU') + ' (отправлена)';
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.student_name}<br><small>${row.student_id}</small></td>
+          <td>${row.subject}</td>
+          <td>${row.title}<br><small>Дедлайн: ${new Date(row.deadline).toLocaleDateString('ru-RU')}</small></td>
+          <td>${statusBadge || row.last_status || '—'}</td>
+          <td>${lastAction}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary view-files" 
+                    data-assignment-id="${row.assignment_id}" 
+                    data-student-id="${row.student_id}">
+              📎 Файлы
+            </button>
+          </td>
+          <td>
+            <button class="btn btn-sm btn-outline-success set-grade"
+                    data-student-id="${row.student_id}"
+                    data-subject-name="${row.subject}"
+                    data-assignment-id="${row.assignment_id}">
+              ✏️ Статус
+            </button>
+          </td>
         `;
-        cont.appendChild(card);
-      }
+        tbody.appendChild(tr);
+      });
+
+      // Обработчики кнопок
+      document.querySelectorAll('.view-files').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const assignmentId = e.target.dataset.assignmentId;
+          const studentId = e.target.dataset.studentId;
+          const res = await fetch(`/api/teacher/files/${assignmentId}/${studentId}`);
+          const files = await res.json();
+          
+          const filesList = document.getElementById('files-list');
+          filesList.innerHTML = '';
+          
+          if (files.length === 0) {
+            filesList.innerHTML = '<p class="text-muted">Файлы не найдены</p>';
+          } else {
+            files.forEach(f => {
+              const link = document.createElement('div');
+              link.innerHTML = `
+                <a href="/download/${f.path}" target="_blank" class="btn btn-sm btn-outline-secondary w-100 mb-2">
+                  📎 ${f.name}
+                </a>
+              `;
+              filesList.appendChild(link);
+            });
+          }
+          
+          bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
+        });
+      });
+
+      document.querySelectorAll('.set-grade').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const modal = document.getElementById('gradeModal');
+          document.getElementById('modal-student-id').value = e.target.dataset.studentId;
+          document.getElementById('modal-subject-name').value = e.target.dataset.subjectName;
+          document.getElementById('modal-assignment-id').value = e.target.dataset.assignmentId;
+          document.getElementById('review').value = '';
+          bootstrap.Modal.getOrCreateInstance(modal).show();
+        });
+      });
     }
 
-    // Обработчик нажатия на кнопку статуса
-    async function handleStatus(button, statusText) {
-      const form = button.closest('.grade-form');
-      const studentId = form.dataset.studentId;
-      const subject = form.dataset.subject;
-      const assignmentId = form.dataset.assignmentId;
-      const review = form.querySelector('textarea').value.trim() || '';
+    // Загрузка истории зачтённых работ
+    async function loadHistory() {
+      const res = await fetch(`/api/teacher/history/${currentTeacherId}`);
+      const history = await res.json();
+      const tbody = document.getElementById('history-rows');
+      const emptyMsg = document.getElementById('history-empty');
+      
+      tbody.innerHTML = '';
+      if (history.length === 0) {
+        emptyMsg.style.display = 'block';
+      } else {
+        emptyMsg.style.display = 'none';
+        history.forEach(item => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+          <td>${item.student_name}<br><small>${item.student_id}</small></td>
+          <td>${item.subject}</td>
+          <td>${item.assignment_title}</td>
+          <td>
+            ${new Date(item.graded_at).toLocaleString('ru-RU')}
+            <br>
+            <button class="btn btn-sm btn-outline-primary mt-1 history-view-files"
+                    data-assignment-id="${item.assignment_id}"
+                    data-student-id="${item.student_id}">
+              📎 Файлы
+            </button>
+          </td>
+        `;
+          tbody.appendChild(tr);
+          // После загрузки всей таблицы — навешиваем обработчики
+document.querySelectorAll('.history-view-files').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    const assignmentId = e.target.dataset.assignmentId;
+    const studentId = e.target.dataset.studentId;
+    const res = await fetch(`/api/teacher/files/${assignmentId}/${studentId}`);
+    const files = await res.json();
+    
+    const filesList = document.getElementById('files-list');
+    filesList.innerHTML = '';
+    
+    if (files.length === 0) {
+      filesList.innerHTML = '<p class="text-muted">Файлы не найдены</p>';
+    } else {
+      files.forEach(f => {
+        const link = document.createElement('div');
+        link.innerHTML = `
+          <a href="/download/${f.path}" target="_blank" class="btn btn-sm btn-outline-secondary w-100 mb-2">
+            📎 ${f.name}
+          </a>
+        `;
+        filesList.appendChild(link);
+      });
+    }
+    
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
+  });
+});
+        });
+      }
 
-      const formData = new FormData();
-      formData.append('student_id', studentId);
-      formData.append('subject_name', subject);
-      formData.append('assignment_id', assignmentId);
-      formData.append('status_input', statusText);
-      if (review) formData.append('review', review);
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('historyModal')).show();
+    }
+
+    // Кнопка "История"
+    document.getElementById('show-history-btn').addEventListener('click', loadHistory);
+
+    // Сохранение оценки
+    document.getElementById('grade-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const studentId = document.getElementById('modal-student-id').value;
+      const subjectName = document.getElementById('modal-subject-name').value;
+      const assignmentId = document.getElementById('modal-assignment-id').value;
+      const statusInput = document.getElementById('status-input').value;
+      const review = document.getElementById('review').value;
 
       const res = await fetch('/api/teacher/grade', {
         method: 'POST',
-        body: formData
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          student_id: studentId,
+          subject_name: subjectName,
+          assignment_id: assignmentId,
+          status_input: statusInput,
+          review: review
+        })
       });
 
       if (res.ok) {
-        alert(`Статус обновлён: ${statusText}`);
-        loadSubmissions(); // Обновляем список (работа с "зачтено" исчезнет)
+        alert('Статус сохранён');
+        bootstrap.Modal.getInstance(document.getElementById('gradeModal')).hide();
+        loadSubmissions(); // Обновляем основной список
       } else {
-        const error = await res.json().catch(() => ({message: 'Ошибка'}));
-        alert('Ошибка: ' + (error.detail || error.message || 'Неизвестная ошибка'));
+        const error = await res.json().catch(() => ({detail: 'Ошибка'}));
+        alert('Ошибка: ' + (error.detail || 'Неизвестная ошибка'));
       }
-    }
+    });
 
     // Инициализация
     if (currentTeacherId) {
-      fetch(`/api/teacher/login`, {
+      fetch('/api/teacher/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `teacher_id=${encodeURIComponent(currentTeacherId)}`
+        body: `teacher_id=${encodeURIComponent(currentTeacherId)}&password=dummy`
       }).then(res => {
         if (res.ok) {
           res.json().then(teacher => {

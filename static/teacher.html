@@ -14,12 +14,12 @@
       margin-left: 8px;
       vertical-align: middle;
     }
-    .status-in_review { background-color: #ffc107; color: #212529; } /* оранжевый */
-    .status-approved { background-color: #28a745; color: white; } /* зелёный */
-    .status-rejected { background-color: #dc3545; color: white; } /* красный */
+    .status-in_review { background-color: #ffc107; color: #212529; }
+    .status-approved { background-color: #28a745; color: white; }
+    .status-rejected { background-color: #dc3545; color: white; }
     .review-block {
       background-color: #f8d7da;
-      border-left: 4  px solid #dc3545;
+      border-left: 4px solid #dc3545;
       padding: 0.75rem;
       margin-top: 0.75rem;
       font-size: 0.95em;
@@ -156,12 +156,30 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    let currentTeacherId = localStorage.getItem('teacher_id');
+    // Вспомогательная функция для получения заголовков с токеном
+    function getAuthHeaders() {
+      const token = localStorage.getItem('auth_token');
+      return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
+
+    // Проверка авторизации при загрузке
+    document.addEventListener('DOMContentLoaded', () => {
+      const token = localStorage.getItem('auth_token');
+      const teacherName = localStorage.getItem('teacher_name');
+      if (token && teacherName) {
+        document.getElementById('teacher-name').textContent = teacherName;
+        loadSubmissions();
+        showMain();
+      } else {
+        showLogin();
+      }
+    });
 
     function showLogin() {
       document.getElementById('login-section').style.display = 'block';
       document.getElementById('main-section').style.display = 'none';
     }
+
     function showMain() {
       document.getElementById('login-section').style.display = 'none';
       document.getElementById('main-section').style.display = 'block';
@@ -184,11 +202,13 @@
           const error = await res.json().catch(() => ({detail: 'Ошибка входа'}));
           throw new Error(error.detail || 'Неверные данные');
         }
-        const teacher = await res.json();
-        currentTeacherId = teacherId;
-        localStorage.setItem('teacher_id', teacherId);
+        const data = await res.json();
+        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('teacher_name', 
+          `${data.user.last_name} ${data.user.first_name}${data.user.patronymic ? ' ' + data.user.patronymic : ''}`
+        );
         document.getElementById('teacher-name').textContent = 
-          `${teacher.last_name} ${teacher.first_name}${teacher.patronymic ? ' ' + teacher.patronymic : ''}`;
+          `${data.user.last_name} ${data.user.first_name}${data.user.patronymic ? ' ' + data.user.patronymic : ''}`;
         loadSubmissions();
         showMain();
       } catch (err) {
@@ -198,165 +218,186 @@
 
     // Выход
     document.getElementById('logout-btn').addEventListener('click', () => {
-      localStorage.removeItem('teacher_id');
-      currentTeacherId = null;
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('teacher_name');
       showLogin();
     });
 
     // Загрузка работ (только актуальные)
     async function loadSubmissions() {
-      const res = await fetch(`/api/teacher/assignments/${currentTeacherId}`);
-      const submissions = await res.json();
-      const tbody = document.getElementById('submissions');
-      tbody.innerHTML = '';
+      try {
+        const res = await fetch(`/api/teacher/assignments/me`, {
+          headers: getAuthHeaders()
+        });
+        if (!res.ok) throw new Error('Сессия истекла');
+        const submissions = await res.json();
+        const tbody = document.getElementById('submissions');
+        tbody.innerHTML = '';
 
-      submissions.forEach(row => {
-        let statusBadge = '';
-        if (row.last_status) {
-          const statusMap = {
-            'принят на рассмотрение': 'in_review',
-            'зачёт': 'approved',
-            'не зачтено': 'rejected'
-          };
-          const cls = statusMap[row.last_status] || '';
-          statusBadge = `<span class="status-badge status-${cls}">${row.last_status}</span>`;
-        }
-
-        let lastAction = '—';
-        if (row.last_action_at) {
-          lastAction = new Date(row.last_action_at).toLocaleString('ru-RU');
-        } else if (row.submitted_at) {
-          lastAction = new Date(row.submitted_at).toLocaleString('ru-RU') + ' (отправлена)';
-        }
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${row.student_name}<br><small>${row.student_id}</small></td>
-          <td>${row.subject}</td>
-          <td>${row.title}<br><small>Дедлайн: ${new Date(row.deadline).toLocaleDateString('ru-RU')}</small></td>
-          <td>${statusBadge || row.last_status || '—'}</td>
-          <td>${lastAction}</td>
-          <td>
-            <button class="btn btn-sm btn-outline-primary view-files" 
-                    data-assignment-id="${row.assignment_id}" 
-                    data-student-id="${row.student_id}">
-              📎 Файлы
-            </button>
-          </td>
-          <td>
-            <button class="btn btn-sm btn-outline-success set-grade"
-                    data-student-id="${row.student_id}"
-                    data-subject-name="${row.subject}"
-                    data-assignment-id="${row.assignment_id}">
-              ✏️ Статус
-            </button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
-
-      // Обработчики кнопок
-      document.querySelectorAll('.view-files').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          const assignmentId = e.target.dataset.assignmentId;
-          const studentId = e.target.dataset.studentId;
-          const res = await fetch(`/api/teacher/files/${assignmentId}/${studentId}`);
-          const files = await res.json();
-          
-          const filesList = document.getElementById('files-list');
-          filesList.innerHTML = '';
-          
-          if (files.length === 0) {
-            filesList.innerHTML = '<p class="text-muted">Файлы не найдены</p>';
-          } else {
-            files.forEach(f => {
-              const link = document.createElement('div');
-              link.innerHTML = `
-                <a href="/download/${f.path}" target="_blank" class="btn btn-sm btn-outline-secondary w-100 mb-2">
-                  📎 ${f.name}
-                </a>
-              `;
-              filesList.appendChild(link);
-            });
+        submissions.forEach(row => {
+          let statusBadge = '';
+          if (row.last_status) {
+            const statusMap = {
+              'принят на рассмотрение': 'in_review',
+              'зачёт': 'approved',
+              'не зачтено': 'rejected'
+            };
+            const cls = statusMap[row.last_status] || '';
+            statusBadge = `<span class="status-badge status-${cls}">${row.last_status}</span>`;
           }
-          
-          bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
-        });
-      });
 
-      document.querySelectorAll('.set-grade').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const modal = document.getElementById('gradeModal');
-          document.getElementById('modal-student-id').value = e.target.dataset.studentId;
-          document.getElementById('modal-subject-name').value = e.target.dataset.subjectName;
-          document.getElementById('modal-assignment-id').value = e.target.dataset.assignmentId;
-          document.getElementById('review').value = '';
-          bootstrap.Modal.getOrCreateInstance(modal).show();
+          let lastAction = '—';
+          if (row.last_action_at) {
+            lastAction = new Date(row.last_action_at).toLocaleString('ru-RU');
+          } else if (row.submitted_at) {
+            lastAction = new Date(row.submitted_at).toLocaleString('ru-RU') + ' (отправлена)';
+          }
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.student_name}<br><small>${row.student_id}</small></td>
+            <td>${row.subject}</td>
+            <td>${row.title}<br><small>Дедлайн: ${new Date(row.deadline).toLocaleDateString('ru-RU')}</small></td>
+            <td>${statusBadge || row.last_status || '—'}</td>
+            <td>${lastAction}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary view-files" 
+                      data-assignment-id="${row.assignment_id}" 
+                      data-student-id="${row.student_id}">
+                📎 Файлы
+              </button>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-success set-grade"
+                      data-student-id="${row.student_id}"
+                      data-subject-name="${row.subject}"
+                      data-assignment-id="${row.assignment_id}">
+                ✏️ Статус
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
         });
-      });
+
+        // Обработчики кнопок
+        document.querySelectorAll('.view-files').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const assignmentId = e.target.dataset.assignmentId;
+            const studentId = e.target.dataset.studentId;
+            const res = await fetch(`/api/teacher/files/${assignmentId}/${studentId}`, {
+              headers: getAuthHeaders()
+            });
+            const files = await res.json();
+            
+            const filesList = document.getElementById('files-list');
+            filesList.innerHTML = '';
+            
+            if (files.length === 0) {
+              filesList.innerHTML = '<p class="text-muted">Файлы не найдены</p>';
+            } else {
+              files.forEach(f => {
+                const link = document.createElement('div');
+                link.innerHTML = `
+                  <a href="/download/${f.path}" target="_blank" class="btn btn-sm btn-outline-secondary w-100 mb-2">
+                    📎 ${f.name}
+                  </a>
+                `;
+                filesList.appendChild(link);
+              });
+            }
+            
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
+          });
+        });
+
+        document.querySelectorAll('.set-grade').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const modal = document.getElementById('gradeModal');
+            document.getElementById('modal-student-id').value = e.target.dataset.studentId;
+            document.getElementById('modal-subject-name').value = e.target.dataset.subjectName;
+            document.getElementById('modal-assignment-id').value = e.target.dataset.assignmentId;
+            document.getElementById('review').value = '';
+            bootstrap.Modal.getOrCreateInstance(modal).show();
+          });
+        });
+      } catch (err) {
+        alert('Требуется повторный вход');
+        localStorage.removeItem('auth_token');
+        showLogin();
+      }
     }
 
     // Загрузка истории зачтённых работ
     async function loadHistory() {
-      const res = await fetch(`/api/teacher/history/${currentTeacherId}`);
-      const history = await res.json();
-      const tbody = document.getElementById('history-rows');
-      const emptyMsg = document.getElementById('history-empty');
-      
-      tbody.innerHTML = '';
-      if (history.length === 0) {
-        emptyMsg.style.display = 'block';
-      } else {
-        emptyMsg.style.display = 'none';
-        history.forEach(item => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-          <td>${item.student_name}<br><small>${item.student_id}</small></td>
-          <td>${item.subject}</td>
-          <td>${item.assignment_title}</td>
-          <td>
-            ${new Date(item.graded_at).toLocaleString('ru-RU')}
-            <br>
-            <button class="btn btn-sm btn-outline-primary mt-1 history-view-files"
-                    data-assignment-id="${item.assignment_id}"
-                    data-student-id="${item.student_id}">
-              📎 Файлы
-            </button>
-          </td>
-        `;
-          tbody.appendChild(tr);
-          // После загрузки всей таблицы — навешиваем обработчики
-document.querySelectorAll('.history-view-files').forEach(btn => {
-  btn.addEventListener('click', async (e) => {
-    const assignmentId = e.target.dataset.assignmentId;
-    const studentId = e.target.dataset.studentId;
-    const res = await fetch(`/api/teacher/files/${assignmentId}/${studentId}`);
-    const files = await res.json();
-    
-    const filesList = document.getElementById('files-list');
-    filesList.innerHTML = '';
-    
-    if (files.length === 0) {
-      filesList.innerHTML = '<p class="text-muted">Файлы не найдены</p>';
-    } else {
-      files.forEach(f => {
-        const link = document.createElement('div');
-        link.innerHTML = `
-          <a href="/download/${f.path}" target="_blank" class="btn btn-sm btn-outline-secondary w-100 mb-2">
-            📎 ${f.name}
-          </a>
-        `;
-        filesList.appendChild(link);
-      });
-    }
-    
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
-  });
-});
+      try {
+        const res = await fetch(`/api/teacher/history/me`, {
+          headers: getAuthHeaders()
         });
-      }
+        if (!res.ok) throw new Error('Сессия истекла');
+        const history = await res.json();
+        const tbody = document.getElementById('history-rows');
+        const emptyMsg = document.getElementById('history-empty');
+        
+        tbody.innerHTML = '';
+        if (history.length === 0) {
+          emptyMsg.style.display = 'block';
+        } else {
+          emptyMsg.style.display = 'none';
+          history.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${item.student_name}<br><small>${item.student_id}</small></td>
+              <td>${item.subject}</td>
+              <td>${item.assignment_title}</td>
+              <td>
+                ${new Date(item.graded_at).toLocaleString('ru-RU')}
+                <br>
+                <button class="btn btn-sm btn-outline-primary mt-1 history-view-files"
+                        data-assignment-id="${item.assignment_id}"
+                        data-student-id="${item.student_id}">
+                  📎 Файлы
+                </button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
 
-      bootstrap.Modal.getOrCreateInstance(document.getElementById('historyModal')).show();
+          // Навешиваем обработчики для кнопок "Файлы" в истории
+          document.querySelectorAll('.history-view-files').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              const assignmentId = e.target.dataset.assignmentId;
+              const studentId = e.target.dataset.studentId;
+              const res = await fetch(`/api/teacher/files/${assignmentId}/${studentId}`, {
+                headers: getAuthHeaders()
+              });
+              const files = await res.json();
+              
+              const filesList = document.getElementById('files-list');
+              filesList.innerHTML = '';
+              
+              if (files.length === 0) {
+                filesList.innerHTML = '<p class="text-muted">Файлы не найдены</p>';
+              } else {
+                files.forEach(f => {
+                  const link = document.createElement('div');
+                  link.innerHTML = `
+                    <a href="/download/${f.path}" target="_blank" class="btn btn-sm btn-outline-secondary w-100 mb-2">
+                      📎 ${f.name}
+                    </a>
+                  `;
+                  filesList.appendChild(link);
+                });
+              }
+              
+              bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
+            });
+          });
+        }
+
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('historyModal')).show();
+      } catch (err) {
+        alert('Ошибка загрузки истории: ' + err.message);
+      }
     }
 
     // Кнопка "История"
@@ -373,7 +414,10 @@ document.querySelectorAll('.history-view-files').forEach(btn => {
 
       const res = await fetch('/api/teacher/grade', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded',
+          ...getAuthHeaders()
+        },
         body: new URLSearchParams({
           student_id: studentId,
           subject_name: subjectName,
@@ -386,34 +430,12 @@ document.querySelectorAll('.history-view-files').forEach(btn => {
       if (res.ok) {
         alert('Статус сохранён');
         bootstrap.Modal.getInstance(document.getElementById('gradeModal')).hide();
-        loadSubmissions(); // Обновляем основной список
+        loadSubmissions();
       } else {
         const error = await res.json().catch(() => ({detail: 'Ошибка'}));
         alert('Ошибка: ' + (error.detail || 'Неизвестная ошибка'));
       }
     });
-
-    // Инициализация
-    if (currentTeacherId) {
-      fetch('/api/teacher/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `teacher_id=${encodeURIComponent(currentTeacherId)}&password=dummy`
-      }).then(res => {
-        if (res.ok) {
-          res.json().then(teacher => {
-            document.getElementById('teacher-name').textContent = 
-              `${teacher.last_name} ${teacher.first_name}${teacher.patronymic ? ' ' + teacher.patronymic : ''}`;
-            loadSubmissions();
-            showMain();
-          });
-        } else {
-          showLogin();
-        }
-      }).catch(() => showLogin());
-    } else {
-      showLogin();
-    }
   </script>
 </body>
 </html>

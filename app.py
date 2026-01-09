@@ -18,7 +18,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # === Вспомогательные функции для времени ===
 def get_current_utc():
-    """Возвращает текущее UTC-время в формате, совместимом с SQLite"""
     return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 # === Константы ===

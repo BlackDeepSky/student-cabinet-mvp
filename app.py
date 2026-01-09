@@ -14,17 +14,12 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Hea
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
+from fastapi.middleware.cors import CORSMiddleware
 
 # === Вспомогательные функции для времени ===
 def get_current_utc():
     """Возвращает текущее UTC-время в формате, совместимом с SQLite"""
     return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-
-def parse_db_datetime(dt_str: str):
-    """Преобразует строку из БД в datetime с UTC"""
-    if not dt_str:
-        return None
-    return datetime.fromisoformat(dt_str.replace(' ', 'T') + '+00:00')
 
 # === Константы ===
 DB_PATH = Path("instance/app.db")
@@ -119,6 +114,17 @@ async def require_auth(authorization: str = Header(None)):
 
 # === Приложение ===
 app = FastAPI()
+
+# Настройка CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Подключение статики
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
@@ -170,24 +176,20 @@ async def submit_work(
         raise HTTPException(400, "Не выбраны файлы")
 
     with get_db() as conn:
-        # Проверка задания
         cur = conn.execute("SELECT id FROM assignments WHERE id = ?", (assignment_id,))
         if not cur.fetchone():
             raise HTTPException(404, "Задание не найдено")
 
-        # Создаём запись работы
         conn.execute("""
             INSERT OR IGNORE INTO submissions (student_id, assignment_id)
             VALUES (?, ?)
         """, (user_id, assignment_id))
 
-        # Получаем ID работы
         cur = conn.execute("""
             SELECT id FROM submissions WHERE student_id = ? AND assignment_id = ?
         """, (user_id, assignment_id))
         submission_id = cur.fetchone()[0]
 
-        # Сохраняем файлы
         file_dir = UPLOAD_BASE_DIR / str(user_id) / str(assignment_id)
         file_dir.mkdir(parents=True, exist_ok=True)
         saved_count = 0
@@ -210,18 +212,12 @@ async def submit_work(
 
         return {"message": f"Отправлено {saved_count} файлов"}
 
-@app.get("/api/assignments/{student_id}")
-async def get_assignments(student_id: str, session = Depends(require_auth)):
+# Эндпоинты для студентов (/me)
+@app.get("/api/assignments/me")
+async def get_my_assignments(session = Depends(require_auth)):
     user_id, user_type = session
     if user_type != "student":
         raise HTTPException(403, "Доступ запрещён")
-    
-    # Проверяем, что студент запрашивает свои данные
-    with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (student_id,))
-        student_row = cur.fetchone()
-        if not student_row or student_row[0] != user_id:
-            raise HTTPException(403, "Доступ запрещён")
     
     with get_db() as conn:
         cur = conn.execute("""
@@ -277,18 +273,13 @@ async def get_assignments(student_id: str, session = Depends(require_auth)):
             for a in assignments_raw
         ]
 
-@app.get("/api/grades/{student_id}")
-async def get_grades(student_id: str, session = Depends(require_auth)):
+@app.get("/api/grades/me")
+async def get_my_grades(session = Depends(require_auth)):
     user_id, user_type = session
     if user_type != "student":
         raise HTTPException(403, "Доступ запрещён")
     
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (student_id,))
-        student_row = cur.fetchone()
-        if not student_row or student_row[0] != user_id:
-            raise HTTPException(403, "Доступ запрещён")
-
         cur = conn.execute("""
             SELECT s.name AS subject, g.grade, g.status, g.graded_at
             FROM grades g
@@ -340,19 +331,14 @@ async def teacher_login(teacher_id: str = Form(...), password: str = Form(...)):
             "user": dict(teacher)
         }
 
-@app.get("/api/teacher/assignments/{teacher_id}")
-async def get_teacher_assignments(teacher_id: str, session = Depends(require_auth)):
+# Эндпоинты для преподавателей (/me)
+@app.get("/api/teacher/assignments/me")
+async def get_my_teacher_assignments(session = Depends(require_auth)):
     user_id, user_type = session
     if user_type != "teacher":
         raise HTTPException(403, "Доступ запрещён")
-    
-    with get_db() as conn:
-        cur = conn.execute("SELECT id FROM teachers WHERE teacher_id = ?", (teacher_id,))
-        teacher_row = cur.fetchone()
-        if not teacher_row or teacher_row[0] != user_id:
-            raise HTTPException(403, "Доступ запрещён")
-        teacher_id_int = user_id
 
+    with get_db() as conn:
         cur = conn.execute("""
             SELECT
                 a.id AS assignment_id,
@@ -373,22 +359,16 @@ async def get_teacher_assignments(teacher_id: str, session = Depends(require_aut
             WHERE st_link.teacher_id = ?
               AND (g.status IS NULL OR g.status NOT IN ('зачёт', 'сдано'))
             ORDER BY a.deadline DESC, st.last_name
-        """, (teacher_id_int,))
+        """, (user_id,))
         return [dict(row) for row in cur.fetchall()]
 
-@app.get("/api/teacher/history/{teacher_id}")
-async def get_teacher_history(teacher_id: str, session = Depends(require_auth)):
+@app.get("/api/teacher/history/me")
+async def get_my_teacher_history(session = Depends(require_auth)):
     user_id, user_type = session
     if user_type != "teacher":
         raise HTTPException(403, "Доступ запрещён")
-    
-    with get_db() as conn:
-        cur = conn.execute("SELECT id FROM teachers WHERE teacher_id = ?", (teacher_id,))
-        teacher_row = cur.fetchone()
-        if not teacher_row or teacher_row[0] != user_id:
-            raise HTTPException(403, "Доступ запрещён")
-        teacher_id_int = user_id
 
+    with get_db() as conn:
         cur = conn.execute("""
             SELECT
                 st.last_name || ' ' || st.first_name AS student_name,
@@ -405,7 +385,7 @@ async def get_teacher_history(teacher_id: str, session = Depends(require_auth)):
             WHERE st_link.teacher_id = ?
               AND g.status IN ('зачёт', 'сдано')
             ORDER BY g.graded_at DESC
-        """, (teacher_id_int,))
+        """, (user_id,))
         return [dict(row) for row in cur.fetchall()]
 
 @app.get("/api/teacher/files/{assignment_id}/{student_id}")

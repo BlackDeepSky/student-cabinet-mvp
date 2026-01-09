@@ -78,3 +78,12 @@ CREATE TABLE IF NOT EXISTS subject_teachers (
     teacher_id INTEGER NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
     PRIMARY KEY (subject_id, teacher_id)
 );
+
+-- Сессии пользователей
+CREATE TABLE IF NOT EXISTS sessions (
+    token       TEXT PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    user_type   TEXT NOT NULL CHECK (user_type IN ('student', 'teacher')),
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at  DATETIME NOT NULL
+);

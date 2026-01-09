@@ -7,18 +7,31 @@ import sqlite3
 import os
 import shutil
 import re
+import secrets
+from datetime import timedelta, datetime, timezone
 from pathlib import Path
-from datetime import datetime
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Header
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
+
+# === Вспомогательные функции для времени ===
+def get_current_utc():
+    """Возвращает текущее UTC-время в формате, совместимом с SQLite"""
+    return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+def parse_db_datetime(dt_str: str):
+    """Преобразует строку из БД в datetime с UTC"""
+    if not dt_str:
+        return None
+    return datetime.fromisoformat(dt_str.replace(' ', 'T') + '+00:00')
 
 # === Константы ===
 DB_PATH = Path("instance/app.db")
 UPLOAD_BASE_DIR = Path("storage/submissions")
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 МБ
 VALID_ID_PATTERN = re.compile(r"^[A-Za-z0-9\-_]+$")
+SESSION_EXPIRE_HOURS = 24
 
 # Убедимся, что папки существуют
 DB_PATH.parent.mkdir(exist_ok=True)
@@ -44,19 +57,16 @@ def get_db():
     return conn
 
 def sanitize_filename(filename: str) -> str:
-    """Очистка имени файла от потенциально опасных символов"""
     safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in filename)
     return safe[:100]
 
 def validate_id(user_id: str) -> str:
-    """Проверка корректности ID студента/преподавателя"""
     id_clean = user_id.strip()
     if not id_clean or not VALID_ID_PATTERN.match(id_clean):
         raise HTTPException(400, "Некорректный идентификатор")
     return id_clean
 
 def normalize_birth_date(raw: str) -> Optional[str]:
-    """Преобразует ввод в формат YYYY-MM-DD"""
     if not raw:
         return None
     raw = re.sub(r"[^\d]", "", raw.strip())
@@ -71,6 +81,41 @@ def normalize_birth_date(raw: str) -> Optional[str]:
         return dt.strftime("%Y-%m-%d")
     except ValueError:
         return None
+
+def create_session(user_id: int, user_type: str) -> str:
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=SESSION_EXPIRE_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
+    
+    with get_db() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (get_current_utc(),))
+        conn.execute("""
+            INSERT INTO sessions (token, user_id, user_type, expires_at)
+            VALUES (?, ?, ?, ?)
+        """, (token, user_id, user_type, expires_at))
+    return token
+
+def verify_session(token: str):
+    if not token:
+        return None
+    
+    with get_db() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (get_current_utc(),))
+        cur = conn.execute("""
+            SELECT user_id, user_type FROM sessions
+            WHERE token = ? AND expires_at > ?
+        """, (token, get_current_utc()))
+        row = cur.fetchone()
+        return (row[0], row[1]) if row else None
+
+async def require_auth(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Требуется авторизация")
+    
+    token = authorization.split(" ", 1)[1]
+    session = verify_session(token)
+    if not session:
+        raise HTTPException(401, "Неверный или просроченный токен")
+    return session
 
 # === Приложение ===
 app = FastAPI()
@@ -94,6 +139,7 @@ async def login(student_id: str = Form(...), password: str = Form(...)):
     birth_date = normalize_birth_date(password)
     if not birth_date:
         raise HTTPException(400, "Неверный формат даты рождения. Используйте ДД.ММ.ГГГГ")
+
     with get_db() as conn:
         cur = conn.execute("""
             SELECT id, last_name, first_name, patronymic
@@ -103,35 +149,46 @@ async def login(student_id: str = Form(...), password: str = Form(...)):
         student = cur.fetchone()
         if not student:
             raise HTTPException(401, "Неверный номер студенческого или дата рождения")
-        return dict(student)
+        
+        token = create_session(student["id"], "student")
+        return {
+            "token": token,
+            "user": dict(student)
+        }
 
 @app.post("/api/submit/{assignment_id}")
 async def submit_work(
     assignment_id: int,
-    student_id: str = Form(...),
-    files: list[UploadFile] = File(...)
+    files: list[UploadFile] = File(...),
+    session = Depends(require_auth)
 ):
+    user_id, user_type = session
+    if user_type != "student":
+        raise HTTPException(403, "Доступ запрещён")
+    
     if not files or all(f.filename == "" for f in files):
         raise HTTPException(400, "Не выбраны файлы")
-    clean_id = validate_id(student_id)
+
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (clean_id,))
-        student_row = cur.fetchone()
-        if not student_row:
-            raise HTTPException(404, "Студент не найден")
-        student_id_int = student_row[0]
+        # Проверка задания
         cur = conn.execute("SELECT id FROM assignments WHERE id = ?", (assignment_id,))
         if not cur.fetchone():
             raise HTTPException(404, "Задание не найдено")
+
+        # Создаём запись работы
         conn.execute("""
             INSERT OR IGNORE INTO submissions (student_id, assignment_id)
             VALUES (?, ?)
-        """, (student_id_int, assignment_id))
+        """, (user_id, assignment_id))
+
+        # Получаем ID работы
         cur = conn.execute("""
             SELECT id FROM submissions WHERE student_id = ? AND assignment_id = ?
-        """, (student_id_int, assignment_id))
+        """, (user_id, assignment_id))
         submission_id = cur.fetchone()[0]
-        file_dir = UPLOAD_BASE_DIR / str(student_id_int) / str(assignment_id)
+
+        # Сохраняем файлы
+        file_dir = UPLOAD_BASE_DIR / str(user_id) / str(assignment_id)
         file_dir.mkdir(parents=True, exist_ok=True)
         saved_count = 0
         for file in files:
@@ -150,17 +207,23 @@ async def submit_work(
                 VALUES (?, ?)
             """, (submission_id, str(file_path)))
             saved_count += 1
+
         return {"message": f"Отправлено {saved_count} файлов"}
 
 @app.get("/api/assignments/{student_id}")
-async def get_assignments(student_id: str):
-    clean_id = validate_id(student_id)
+async def get_assignments(student_id: str, session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "student":
+        raise HTTPException(403, "Доступ запрещён")
+    
+    # Проверяем, что студент запрашивает свои данные
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (clean_id,))
+        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (student_id,))
         student_row = cur.fetchone()
-        if not student_row:
-            raise HTTPException(404, "Студент не найден")
-        student_id_int = student_row[0]
+        if not student_row or student_row[0] != user_id:
+            raise HTTPException(403, "Доступ запрещён")
+    
+    with get_db() as conn:
         cur = conn.execute("""
             SELECT a.id, a.title, a.description, a.deadline, s.id AS subject_id, s.name AS subject
             FROM assignments a
@@ -168,11 +231,12 @@ async def get_assignments(student_id: str):
             ORDER BY a.deadline
         """)
         assignments_raw = cur.fetchall()
+
         cur = conn.execute("""
             SELECT assignment_id, status, submitted_at, review
             FROM submissions
             WHERE student_id = ?
-        """, (student_id_int,))
+        """, (user_id,))
         submission_map = {
             row["assignment_id"]: {
                 "status": row["status"],
@@ -181,6 +245,7 @@ async def get_assignments(student_id: str):
             }
             for row in cur.fetchall()
         }
+
         cur = conn.execute("""
             SELECT s.id AS subject_id,
                    GROUP_CONCAT(
@@ -196,6 +261,7 @@ async def get_assignments(student_id: str):
             GROUP BY s.id
         """)
         teacher_map = {row["subject_id"]: row["teachers"] or "—" for row in cur.fetchall()}
+
         return [
             {
                 "id": a["id"],
@@ -212,21 +278,25 @@ async def get_assignments(student_id: str):
         ]
 
 @app.get("/api/grades/{student_id}")
-async def get_grades(student_id: str):
-    clean_id = validate_id(student_id)
+async def get_grades(student_id: str, session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "student":
+        raise HTTPException(403, "Доступ запрещён")
+    
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (clean_id,))
+        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (student_id,))
         student_row = cur.fetchone()
-        if not student_row:
-            raise HTTPException(404, "Студент не найден")
-        student_id_int = student_row[0]
+        if not student_row or student_row[0] != user_id:
+            raise HTTPException(403, "Доступ запрещён")
+
         cur = conn.execute("""
             SELECT s.name AS subject, g.grade, g.status, g.graded_at
             FROM grades g
             JOIN subjects s ON g.subject_id = s.id
             WHERE g.student_id = ?
             ORDER BY g.graded_at DESC
-        """, (student_id_int,))
+        """, (user_id,))
+
         grades = []
         for row in cur.fetchall():
             graded_at = row["graded_at"]
@@ -253,6 +323,7 @@ async def teacher_login(teacher_id: str = Form(...), password: str = Form(...)):
     birth_date = normalize_birth_date(password)
     if not birth_date:
         raise HTTPException(400, "Неверный формат даты рождения. Используйте ДД.ММ.ГГГГ")
+
     with get_db() as conn:
         cur = conn.execute("""
             SELECT id, last_name, first_name, patronymic
@@ -262,17 +333,26 @@ async def teacher_login(teacher_id: str = Form(...), password: str = Form(...)):
         teacher = cur.fetchone()
         if not teacher:
             raise HTTPException(401, "Неверный ID преподавателя или дата рождения")
-        return dict(teacher)
+        
+        token = create_session(teacher["id"], "teacher")
+        return {
+            "token": token,
+            "user": dict(teacher)
+        }
 
 @app.get("/api/teacher/assignments/{teacher_id}")
-async def get_teacher_assignments(teacher_id: str):
+async def get_teacher_assignments(teacher_id: str, session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "teacher":
+        raise HTTPException(403, "Доступ запрещён")
+    
     with get_db() as conn:
         cur = conn.execute("SELECT id FROM teachers WHERE teacher_id = ?", (teacher_id,))
         teacher_row = cur.fetchone()
-        if not teacher_row:
-            raise HTTPException(404, "Преподаватель не найден")
-        teacher_id_int = teacher_row[0]
-        # Фильтруем: НЕ показываем зачтённые работы
+        if not teacher_row or teacher_row[0] != user_id:
+            raise HTTPException(403, "Доступ запрещён")
+        teacher_id_int = user_id
+
         cur = conn.execute("""
             SELECT
                 a.id AS assignment_id,
@@ -297,14 +377,18 @@ async def get_teacher_assignments(teacher_id: str):
         return [dict(row) for row in cur.fetchall()]
 
 @app.get("/api/teacher/history/{teacher_id}")
-async def get_teacher_history(teacher_id: str):
-    """Получить историю зачтённых работ преподавателя"""
+async def get_teacher_history(teacher_id: str, session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "teacher":
+        raise HTTPException(403, "Доступ запрещён")
+    
     with get_db() as conn:
         cur = conn.execute("SELECT id FROM teachers WHERE teacher_id = ?", (teacher_id,))
         teacher_row = cur.fetchone()
-        if not teacher_row:
-            raise HTTPException(404, "Преподаватель не найден")
-        teacher_id_int = teacher_row[0]
+        if not teacher_row or teacher_row[0] != user_id:
+            raise HTTPException(403, "Доступ запрещён")
+        teacher_id_int = user_id
+
         cur = conn.execute("""
             SELECT
                 st.last_name || ' ' || st.first_name AS student_name,
@@ -312,7 +396,7 @@ async def get_teacher_history(teacher_id: str):
                 s.name AS subject,
                 a.title AS assignment_title,
                 g.graded_at,
-                a.id AS assignment_id  -- ← для скачивания файлов
+                a.id AS assignment_id
             FROM grades g
             JOIN subjects s ON g.subject_id = s.id
             JOIN assignments a ON a.subject_id = s.id
@@ -325,7 +409,15 @@ async def get_teacher_history(teacher_id: str):
         return [dict(row) for row in cur.fetchall()]
 
 @app.get("/api/teacher/files/{assignment_id}/{student_id}")
-async def get_submission_files(assignment_id: int, student_id: str):
+async def get_submission_files(
+    assignment_id: int, 
+    student_id: str,
+    session = Depends(require_auth)
+):
+    user_id, user_type = session
+    if user_type != "teacher":
+        raise HTTPException(403, "Доступ запрещён")
+    
     clean_id = validate_id(student_id)
     with get_db() as conn:
         cur = conn.execute("""
@@ -349,8 +441,13 @@ async def set_grade(
     subject_name: str = Form(...),
     assignment_id: int = Form(...),
     status_input: str = Form(...),
-    review: Optional[str] = Form(None)
+    review: Optional[str] = Form(None),
+    session = Depends(require_auth)
 ):
+    user_id, user_type = session
+    if user_type != "teacher":
+        raise HTTPException(403, "Доступ запрещён")
+    
     clean_student_id = validate_id(student_id)
     with get_db() as conn:
         cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (clean_student_id,))
@@ -358,11 +455,13 @@ async def set_grade(
         if not student_row:
             raise HTTPException(404, "Студент не найден")
         student_id_int = student_row[0]
+
         cur = conn.execute("SELECT id FROM subjects WHERE name = ?", (subject_name,))
         subject_row = cur.fetchone()
         if not subject_row:
             raise HTTPException(404, "Предмет не найден")
         subject_id_int = subject_row[0]
+
         if status_input == "не зачтено":
             cur = conn.execute("""
                 SELECT s.id FROM submissions s
@@ -379,6 +478,7 @@ async def set_grade(
                     except (FileNotFoundError, OSError):
                         pass
                 conn.execute("DELETE FROM submission_files WHERE submission_id = ?", (submission_id,))
+
         status_mapping = {
             "зачёт": "approved",
             "сдано": "approved",
@@ -388,11 +488,13 @@ async def set_grade(
             "принят на рассмотрение": "in_review"
         }
         db_status = status_mapping.get(status_input, "submitted")
+
         conn.execute("""
             UPDATE submissions
             SET status = ?, review = ?
             WHERE student_id = ? AND assignment_id = ?
         """, (db_status, review, student_id_int, assignment_id))
+
         grade_value = 100 if status_input in ("зачёт", "сдано") else None
         conn.execute("""
             INSERT INTO grades (student_id, subject_id, grade, status, review, graded_at)
@@ -404,12 +506,13 @@ async def set_grade(
                 review = excluded.review,
                 graded_at = excluded.graded_at
         """, (student_id_int, subject_id_int, grade_value, status_input, review))
+
         return {"message": "Статус и рецензия сохранены"}
 
 # ===== СКАЧИВАНИЕ ФАЙЛОВ =====
 
 @app.get("/download/{path:path}")
-async def download_file(path: str):
+async def download_file(path: str, session = Depends(require_auth)):
     if ".." in path or path.startswith("/"):
         raise HTTPException(400, "Некорректный путь")
     full_path = Path("storage") / path

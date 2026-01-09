@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Кабинет студента</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href=" https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
     .status-badge {
       font-size: 0.85em;
@@ -14,10 +14,10 @@
       margin-left: 8px;
       vertical-align: middle;
     }
-    .status-submitted { background-color: #6c757d; color: white; } /* серый */
-    .status-in_review { background-color: #ffc107; color: #212529; } /* оранжевый */
-    .status-approved { background-color: #28a745; color: white; } /* зелёный */
-    .status-rejected { background-color: #dc3545; color: white; } /* красный */
+    .status-submitted { background-color: #6c757d; color: white; }
+    .status-in_review { background-color: #ffc107; color: #212529; }
+    .status-approved { background-color: #28a745; color: white; }
+    .status-rejected { background-color: #dc3545; color: white; }
     .review-block {
       background-color: #f8d7da;
       border-left: 4px solid #dc3545;
@@ -53,51 +53,53 @@
         <h2>Добро пожаловать, <span id="student-name"></span>!</h2>
         <button id="logout-btn" class="btn btn-outline-secondary">Выйти</button>
       </div>
-          <!-- Полезные ссылки -->
+
+      <!-- Полезные ссылки -->
       <div class="row mb-4">
         <div class="col-md-3 col-sm-6 mb-2">
-          <a href="https://www.politex.mogilev.by/zaochnik/raspisanie-zanyatiy-818" 
+          <a href="https://www.politex.mogilev.by/zaochnik/raspisanie-zanyatiy-818"
             class="btn btn-outline-primary w-100 d-flex align-items-center justify-content-center gap-2"
             target="_blank" rel="noopener">
             <i class="bi bi-calendar2-week"></i> Расписание занятий
           </a>
         </div>
         <div class="col-md-3 col-sm-6 mb-2">
-          <a href="https://www.politex.mogilev.by/zaochnik/uchebnye-materialy-282" 
+          <a href="https://www.politex.mogilev.by/zaochnik/uchebnye-materialy-282"
             class="btn btn-outline-warning w-100 d-flex align-items-center justify-content-center gap-2"
             target="_blank" rel="noopener">
             <i class="bi bi-book"></i> Учебные материалы
           </a>
         </div>
         <div class="col-md-3 col-sm-6 mb-2">
-          <a href="https://www.politex.mogilev.by/uchebnye-grafiki-126" 
+          <a href="https://www.politex.mogilev.by/uchebnye-grafiki-126"
             class="btn btn-outline-success w-100 d-flex align-items-center justify-content-center gap-2"
             target="_blank" rel="noopener">
             <i class="bi bi-graph-up"></i> Учебные графики
           </a>
         </div>
         <div class="col-md-3 col-sm-6 mb-2">
-          <a href="https://www.politex.mogilev.by/zaochnik/raspisanie-konsultaciy-2099" 
+          <a href="https://www.politex.mogilev.by/zaochnik/raspisanie-konsultaciy-2099"
             class="btn btn-outline-info w-100 d-flex align-items-center justify-content-center gap-2"
             target="_blank" rel="noopener">
             <i class="bi bi-person-video3"></i> Расписание консультаций
           </a>
         </div>
         <div class="col-md-3 col-sm-6 mb-2">
-          <a href="https://www.politex.mogilev.by/node/2026" 
+          <a href="https://www.politex.mogilev.by/node/2026"
             class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2"
             target="_blank" rel="noopener">
             <i class="bi bi-cash-coin"></i> Оплата
           </a>
         </div>
         <div class="col-md-3 col-sm-6 mb-2">
-          <a href="https://www.politex.mogilev.by/" 
+          <a href="https://www.politex.mogilev.by/"
             class="btn btn-outline-dark w-100 d-flex align-items-center justify-content-center gap-2"
             target="_blank" rel="noopener">
             <i class="bi bi-house-door"></i> Сайт учебного заведения
           </a>
         </div>
       </div>
+
       <h3>Задания</h3>
       <div id="assignments"></div>
 
@@ -119,8 +121,13 @@
   </div>
 
   <script>
-    let currentStudentId = localStorage.getItem('student_id');
+    // Вспомогательная функция для заголовков авторизации
+    function getAuthHeaders() {
+      const token = localStorage.getItem('auth_token');
+      return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
 
+    // Переключение между формами
     function showLogin() {
       document.getElementById('login-section').style.display = 'block';
       document.getElementById('main-section').style.display = 'none';
@@ -130,183 +137,170 @@
       document.getElementById('main-section').style.display = 'block';
     }
 
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', () => {
+      const token = localStorage.getItem('auth_token');
+      const name = localStorage.getItem('student_name');
+      if (token && name) {
+        document.getElementById('student-name').textContent = name;
+        loadAssignments();
+        loadGrades();
+        showMain();
+      } else {
+        showLogin();
+      }
+    });
+
     // Вход
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const studentId = document.getElementById('student-id').value.trim();
       const password = document.getElementById('password').value.trim();
       if (!studentId || !password) return;
-    
+
       try {
         const res = await fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `student_id=${encodeURIComponent(studentId)}&password=${encodeURIComponent(password)}`
         });
-        if (!res.ok) {
-          const error = await res.json().catch(() => ({detail: 'Ошибка входа'}));
-          throw new Error(error.detail || 'Неверные данные');
-        }
-        const student = await res.json();
-        currentStudentId = studentId;
-        localStorage.setItem('student_id', studentId);
+        if (!res.ok) throw new Error('Неверные данные');
+
+        const data = await res.json();
+        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('student_name', 
+          `${data.user.last_name} ${data.user.first_name}${data.user.patronymic ? ' ' + data.user.patronymic : ''}`
+        );
         document.getElementById('student-name').textContent = 
-          `${student.last_name} ${student.first_name}${student.patronymic ? ' ' + student.patronymic : ''}`;
+          `${data.user.last_name} ${data.user.first_name}${data.user.patronymic ? ' ' + data.user.patronymic : ''}`;
         loadAssignments();
         loadGrades();
         showMain();
       } catch (err) {
-        alert('Ошибка: ' + err.message);
+        alert('Ошибка входа: ' + err.message);
       }
     });
 
     // Выход
     document.getElementById('logout-btn').addEventListener('click', () => {
-      localStorage.removeItem('student_id');
-      currentStudentId = null;
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('student_name');
       showLogin();
     });
 
     // Загрузка заданий
     async function loadAssignments() {
-      const res = await fetch(`/api/assignments/${currentStudentId}`);
-      const assignments = await res.json();
-      const cont = document.getElementById('assignments');
-      cont.innerHTML = '';
+      try {
+        const res = await fetch('/api/assignments/me', { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('Сессия истекла');
+        const assignments = await res.json();
+        const cont = document.getElementById('assignments');
+        cont.innerHTML = '';
 
-      assignments.forEach(a => {
-        const deadline = new Date(a.deadline).toLocaleDateString('ru-RU');
-        const submittedAt = a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('ru-RU') : null;
+        assignments.forEach(a => {
+          const deadline = new Date(a.deadline).toLocaleDateString('ru-RU');
+          const submittedAt = a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('ru-RU') : null;
 
-        // Статус с датой
-        let statusBadge = '';
-        if (a.status) {
-          const dateStr = submittedAt ? ` (${submittedAt})` : '';
-          switch(a.status) {
-            case 'submitted':
-              statusBadge = `<span class="status-badge status-submitted">Отправлено${dateStr}</span>`;
-              break;
-            case 'in_review':
-              statusBadge = `<span class="status-badge status-in_review">На рассмотрении${dateStr}</span>`;
-              break;
-            case 'approved':
-              statusBadge = `<span class="status-badge status-approved">Зачтено${dateStr}</span>`;
-              break;
-            case 'rejected':
-              statusBadge = `<span class="status-badge status-rejected">Не зачтено${dateStr}</span>`;
-              break;
+          let statusBadge = '';
+          if (a.status) {
+            const dateStr = submittedAt ? ` (${submittedAt})` : '';
+            switch(a.status) {
+              case 'submitted': statusBadge = `<span class="status-badge status-submitted">Отправлено${dateStr}</span>`; break;
+              case 'in_review': statusBadge = `<span class="status-badge status-in_review">На рассмотрении${dateStr}</span>`; break;
+              case 'approved': statusBadge = `<span class="status-badge status-approved">Зачтено${dateStr}</span>`; break;
+              case 'rejected': statusBadge = `<span class="status-badge status-rejected">Не зачтено${dateStr}</span>`; break;
+            }
           }
-        }
 
-        // Рецензия (только для "не зачтено")
-        let reviewBlock = '';
-        if (a.status === 'rejected' && a.review) {
-          reviewBlock = `<div class="review-block"><strong>Рецензия:</strong> ${a.review}</div>`;
-        }
+          let reviewBlock = '';
+          if (a.status === 'rejected' && a.review) {
+            reviewBlock = `<div class="review-block"><strong>Рецензия:</strong> ${a.review}</div>`;
+          }
 
-        // Действие под заданием
-        let actionBlock = '';
-        if (a.status === 'approved') {
-          // Работа зачтена — ничего не показываем
-          actionBlock = '';
-        } else if (a.status === 'in_review') {
-          // На проверке
-          actionBlock = '<p class="text-muted">Работа проверяется преподавателем</p>';
-        } else {
-          // submitted или rejected — можно отправлять
-          actionBlock = `
-            <form class="submit-form" data-assignment-id="${a.id}">
-              <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
-              <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
-            </form>
-          `;
-        }
-
-        const el = document.createElement('div');
-        el.className = 'card mb-3';
-        el.innerHTML = `
-          <div class="card-body">
-            <h6 class="text-muted">${a.subject}</h6>
-            <p class="text-muted mb-2">Преподаватель: ${a.teachers}</p>
-            <h5>${a.title} ${statusBadge}</h5>
-            <p>${a.description}</p>
-            <p><small>Дедлайн: ${deadline}</small></p>
-            ${reviewBlock}
-            ${actionBlock}
-          </div>
-        `;
-        cont.appendChild(el);
-      });
-
-      // Обработчики отправки
-      document.querySelectorAll('.submit-form').forEach(form => {
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const assignmentId = e.target.dataset.assignmentId;
-          const fileInput = e.target.querySelector('input[type="file"]');
-          const files = Array.from(fileInput.files);
-          if (!files.length) return;
-
-          const formData = new FormData();
-          formData.append('student_id', currentStudentId);
-          files.forEach(file => {
-            formData.append('files', file);
-          });
-
-          const res = await fetch(`/api/submit/${assignmentId}`, {
-            method: 'POST',
-            body: formData
-          });
-          if (res.ok) {
-            alert('Работа отправлена!');
-            loadAssignments();
+          let actionBlock = '';
+          if (a.status === 'approved') {
+            // Ничего не показываем
+          } else if (a.status === 'in_review') {
+            actionBlock = '<p class="text-muted">Работа проверяется преподавателем</p>';
           } else {
-            const error = await res.json().catch(() => ({detail: 'Ошибка отправки'}));
-            alert('Ошибка: ' + (error.detail || 'Неизвестная ошибка'));
+            actionBlock = `
+              <form class="submit-form" data-assignment-id="${a.id}">
+                <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
+                <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+              </form>
+            `;
           }
+
+          const el = document.createElement('div');
+          el.className = 'card mb-3';
+          el.innerHTML = `
+            <div class="card-body">
+              <h6 class="text-muted">${a.subject}</h6>
+              <p class="text-muted mb-2">Преподаватель: ${a.teachers}</p>
+              <h5>${a.title} ${statusBadge}</h5>
+              <p>${a.description}</p>
+              <p><small>Дедлайн: ${deadline}</small></p>
+              ${reviewBlock}
+              ${actionBlock}
+            </div>
+          `;
+          cont.appendChild(el);
         });
-      });
-    }
 
-    // Загрузка оценок
-    async function loadGrades() {
-      const res = await fetch(`/api/grades/${currentStudentId}`);
-      const grades = await res.json();
-      const tbody = document.getElementById('grades');
-      tbody.innerHTML = '';
-      grades.forEach(g => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${g.subject}</td>
-          <td>${g.grade || '–'}</td>
-          <td>${g.status || '–'}</td>
-          <td>${g.graded_at || '—'}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
+        // Обработчики отправки
+        document.querySelectorAll('.submit-form').forEach(form => {
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const assignmentId = e.target.dataset.assignmentId;
+            const files = Array.from(e.target.querySelector('input[type="file"]').files);
+            if (!files.length) return;
 
-    // Инициализация
-    if (currentStudentId) {
-      fetch(`/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `student_id=${encodeURIComponent(currentStudentId)}`
-      }).then(res => {
-        if (res.ok) {
-          res.json().then(student => {
-            document.getElementById('student-name').textContent = 
-              `${student.last_name} ${student.first_name}${student.patronymic ? ' ' + student.patronymic : ''}`;
-            loadAssignments();
-            loadGrades();
-            showMain();
+            const formData = new FormData();
+            files.forEach(f => formData.append('files', f));
+
+            const res = await fetch(`/api/submit/${assignmentId}`, {
+              method: 'POST',
+              headers: getAuthHeaders(),
+              body: formData
+            });
+
+            if (res.ok) {
+              alert('Работа отправлена!');
+              loadAssignments();
+            } else {
+              const err = await res.json().catch(() => ({detail: 'Неизвестная ошибка'}));
+              alert('Ошибка: ' + (err.detail || ''));
+            }
           });
-        } else {
-          showLogin();
-        }
-      }).catch(() => showLogin());
-    } else {
-      showLogin();
+        });
+      } catch (err) {
+        alert('Требуется повторный вход');
+        localStorage.removeItem('auth_token');
+        showLogin();
+      }
+    }
+
+    // Загрузка успеваемости
+    async function loadGrades() {
+      try {
+        const res = await fetch('/api/grades/me', { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('Сессия истекла');
+        const grades = await res.json();
+        const tbody = document.getElementById('grades');
+        tbody.innerHTML = '';
+        grades.forEach(g => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${g.subject}</td>
+            <td>${g.grade || '–'}</td>
+            <td>${g.status || '–'}</td>
+            <td>${g.graded_at || '—'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.warn('Не удалось загрузить успеваемость:', err.message);
+      }
     }
   </script>
 </body>

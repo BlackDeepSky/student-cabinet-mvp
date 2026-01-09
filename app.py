@@ -8,7 +8,7 @@ import os
 import shutil
 import re
 import secrets
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Header
 from fastapi.responses import HTMLResponse, FileResponse
@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # === Вспомогательные функции для времени ===
 def get_current_utc():
-    return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 # === Константы ===
 DB_PATH = Path("instance/app.db")
@@ -78,7 +78,7 @@ def normalize_birth_date(raw: str) -> Optional[str]:
 
 def create_session(user_id: int, user_type: str) -> str:
     token = secrets.token_urlsafe(32)
-    expires_at = (datetime.now(timezone.utc) + timedelta(hours=SESSION_EXPIRE_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
+    expires_at = (datetime.now() + timedelta(hours=SESSION_EXPIRE_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
     
     with get_db() as conn:
         conn.execute("DELETE FROM sessions WHERE expires_at < ?", (get_current_utc(),))

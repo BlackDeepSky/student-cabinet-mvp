@@ -418,13 +418,30 @@
                 filesList.innerHTML = '<p class="text-muted">Файлы не найдены</p>';
               } else {
                 files.forEach(f => {
-                  const link = document.createElement('div');
-                  link.innerHTML = `
-                    <a href="/download/${f.path}" target="_blank" class="btn btn-sm btn-outline-secondary w-100 mb-2">
-                      📎 ${f.name}
-                    </a>
-                  `;
-                  filesList.appendChild(link);
+                  const button = document.createElement('button');
+                  button.className = 'btn btn-sm btn-outline-secondary w-100 mb-2';
+                  button.textContent = `📎 ${f.name}`;
+                  button.onclick = async () => {
+                    try {
+                      const res = await fetch(`/download/${f.path}`, {
+                        headers: getAuthHeaders()
+                      });
+                      if (!res.ok) throw new Error('Ошибка скачивания');
+                      
+                      const blob = await res.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = f.name;
+                      document.body.appendChild(a);
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                      a.remove();
+                    } catch (err) {
+                      alert('Не удалось скачать файл: ' + err.message);
+                    }
+                  };
+                  filesList.appendChild(button);
                 });
               }
               

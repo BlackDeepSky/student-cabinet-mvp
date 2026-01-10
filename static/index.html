@@ -123,8 +123,8 @@
   <script>
     // Вспомогательная функция для заголовков авторизации
     function getAuthHeaders() {
-      const token = localStorage.getItem('auth_token');
-
+      const token = localStorage.getItem('student_token');
+      console.log('🎓 Токен студента:', token ? 'да' : 'нет');
       return token ? { 'Authorization': `Bearer ${token}` } : {};
     }
 
@@ -139,17 +139,17 @@
     }
 
     // Инициализация при загрузке страницы
-    document.addEventListener('DOMContentLoaded', () => {
-      const token = localStorage.getItem('auth_token');
-      const name = localStorage.getItem('student_name');
-      if (token && name) {
-        document.getElementById('student-name').textContent = name;
-        loadAssignments();
-        loadGrades();
-        showMain();
-      } else {
-        showLogin();
-      }
+    window.addEventListener('load', () => {
+    const token = localStorage.getItem('student_token');
+    const name = localStorage.getItem('student_name');
+    if (token && name) {
+      document.getElementById('student-name').textContent = name;
+      loadAssignments();
+      loadGrades();
+      showMain();
+    } else {
+      showLogin();
+    }
     });
 
     // Вход
@@ -168,7 +168,7 @@
         if (!res.ok) throw new Error('Неверные данные');
 
         const data = await res.json();
-        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('student_token', data.token);
         localStorage.setItem('student_name', 
           `${data.user.last_name} ${data.user.first_name}${data.user.patronymic ? ' ' + data.user.patronymic : ''}`
         );
@@ -193,7 +193,16 @@
     async function loadAssignments() {
       try {
         const res = await fetch('/api/assignments/me', { headers: getAuthHeaders() });
-        if (!res.ok) throw new Error('Сессия истекла');
+        if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          alert('Сессия истекла. Пожалуйста, войдите снова.');
+          localStorage.removeItem('student_token');
+          localStorage.removeItem('student_name');
+          showLogin();
+          return;
+        }
+        throw new Error('Ошибка загрузки');
+      }
         const assignments = await res.json();
         const cont = document.getElementById('assignments');
         cont.innerHTML = '';
@@ -290,7 +299,16 @@
     async function loadGrades() {
       try {
         const res = await fetch('/api/grades/me', { headers: getAuthHeaders() });
-        if (!res.ok) throw new Error('Сессия истекла');
+        if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          alert('Сессия истекла. Пожалуйста, войдите снова.');
+          localStorage.removeItem('student_token');
+          localStorage.removeItem('student_name');
+          showLogin();
+          return;
+        }
+        throw new Error('Ошибка загрузки');
+        }
         const grades = await res.json();
         const tbody = document.getElementById('grades');
         tbody.innerHTML = '';

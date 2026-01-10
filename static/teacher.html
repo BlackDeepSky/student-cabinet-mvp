@@ -164,7 +164,7 @@
   <script>
     // Вспомогательная функция для получения заголовков с токеном
     function getAuthHeaders() {
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem('teacher_token');
       console.log('Токен преподавателя:', token);
       if (!token) {
         console.warn('⚠️ Токен отсутствует! Проверьте, сохраняется ли он после входа.');
@@ -173,11 +173,11 @@
     }
 
     // Проверка авторизации при загрузке
-    document.addEventListener('DOMContentLoaded', () => {
-      const token = localStorage.getItem('auth_token');
-      const teacherName = localStorage.getItem('teacher_name');
-      if (token && teacherName) {
-        document.getElementById('teacher-name').textContent = teacherName;
+    window.addEventListener('load', () => {
+      const token = localStorage.getItem('teacher_token');
+      const name = localStorage.getItem('teacher_name');
+      if (token && name) {
+        document.getElementById('teacher-name').textContent = name;
         loadSubmissions();
         showMain();
       } else {
@@ -213,7 +213,7 @@
           throw new Error(error.detail || 'Неверные данные');
         }
         const data = await res.json();
-        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('teacher_token', data.token);
         localStorage.setItem('teacher_name', 
           `${data.user.last_name} ${data.user.first_name}${data.user.patronymic ? ' ' + data.user.patronymic : ''}`
         );
@@ -228,7 +228,7 @@
 
     // Выход
     document.getElementById('logout-btn').addEventListener('click', () => {
-      localStorage.removeItem('auth_token');
+      localStorage.removeItem('teacher_token');
       localStorage.removeItem('teacher_name');
       showLogin();
     });
@@ -242,7 +242,16 @@
         const res = await fetch('/api/teacher/assignments/me', {
           headers: getAuthHeaders()
         });
-        if (!res.ok) throw new Error('Сессия истекла');
+        if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          alert('Сессия преподавателя истекла. Пожалуйста, войдите снова.');
+          localStorage.removeItem('teacher_token');
+          localStorage.removeItem('teacher_name');
+          showLogin();
+          return;
+        }
+        throw new Error('Ошибка');
+        }
         const submissions = await res.json();
         const tbody = document.getElementById('submissions');
         tbody.innerHTML = '';
@@ -361,7 +370,7 @@
         });
       } catch (err) {
         alert('Требуется повторный вход');
-        localStorage.removeItem('auth_token');
+        localStorage.removeItem('teacher_token');
         showLogin();
       }
     }
@@ -372,7 +381,16 @@
         const res = await fetch(`/api/teacher/history/me`, {
           headers: getAuthHeaders()
         });
-        if (!res.ok) throw new Error('Сессия истекла');
+        if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          alert('Сессия преподавателя истекла. Пожалуйста, войдите снова.');
+          localStorage.removeItem('teacher_token');
+          localStorage.removeItem('teacher_name');
+          showLogin();
+          return;
+        }
+        throw new Error('Ошибка');
+        }
         const history = await res.json();
         const tbody = document.getElementById('history-rows');
         const emptyMsg = document.getElementById('history-empty');

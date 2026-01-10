@@ -81,7 +81,7 @@ def create_session(user_id: int, user_type: str) -> str:
     expires_at = (datetime.now() + timedelta(hours=SESSION_EXPIRE_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
     
     with get_db() as conn:
-        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (get_current_utc(),))
+        conn.execute("DELETE FROM sessions WHERE user_id = ? AND user_type = ?", (user_id, user_type))
         conn.execute("""
             INSERT INTO sessions (token, user_id, user_type, expires_at)
             VALUES (?, ?, ?, ?)
@@ -90,16 +90,31 @@ def create_session(user_id: int, user_type: str) -> str:
 
 def verify_session(token: str):
     if not token:
+        print("⚠️ Токен отсутствует")
         return None
     
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"🔍 Проверка токена: {token[:10]}..., текущее время: {current_time}")
+    
     with get_db() as conn:
-        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (get_current_utc(),))
-        cur = conn.execute("""
-            SELECT user_id, user_type FROM sessions
-            WHERE token = ? AND expires_at > ?
-        """, (token, get_current_utc()))
+        # Сначала найдём сессию по токену
+        cur = conn.execute("SELECT user_id, user_type, expires_at FROM sessions WHERE token = ?", (token,))
         row = cur.fetchone()
-        return (row[0], row[1]) if row else None
+        if not row:
+            print("❌ Токен не найден в БД")
+            return None
+        
+        user_id, user_type, expires_at = row
+        print(f"📊 Найдена сессия: user_id={user_id}, type={user_type}, expires_at={expires_at}")
+        
+        if expires_at <= current_time:
+            print("⏳ Сессия просрочена")
+            # Удалим её
+            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            return None
+        
+        print("✅ Сессия активна")
+        return (user_id, user_type)
 
 async def require_auth(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -109,7 +124,9 @@ async def require_auth(authorization: str = Header(None)):
     session = verify_session(token)
     if not session:
         raise HTTPException(401, "Неверный или просроченный токен")
+    print(f"🔑 Получен заголовок: {authorization}")
     return session
+
 
 # === Приложение ===
 app = FastAPI()

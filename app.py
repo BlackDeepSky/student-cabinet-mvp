@@ -17,7 +17,7 @@ from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 
 # === Вспомогательные функции для времени ===
-def get_current_utc():
+def get_current_time():
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 # === Константы ===
@@ -36,7 +36,7 @@ def init_database_if_needed():
     if not DB_PATH.exists():
         print("🔵 БД отсутствует. Инициализирую...")
         try:
-            from seed_data import seed_data
+            from db_seed import seed_data
             seed_data()
             print("✅ БД успешно создана.")
         except Exception as e:
@@ -90,30 +90,20 @@ def create_session(user_id: int, user_type: str) -> str:
 
 def verify_session(token: str):
     if not token:
-        print("⚠️ Токен отсутствует")
         return None
     
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    print(f"🔍 Проверка токена: {token[:10]}..., текущее время: {current_time}")
-    
+    current_time = get_current_time()
     with get_db() as conn:
-        # Сначала найдём сессию по токену
         cur = conn.execute("SELECT user_id, user_type, expires_at FROM sessions WHERE token = ?", (token,))
         row = cur.fetchone()
         if not row:
-            print("❌ Токен не найден в БД")
             return None
         
         user_id, user_type, expires_at = row
-        print(f"📊 Найдена сессия: user_id={user_id}, type={user_type}, expires_at={expires_at}")
-        
         if expires_at <= current_time:
-            print("⏳ Сессия просрочена")
-            # Удалим её
             conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
             return None
         
-        print("✅ Сессия активна")
         return (user_id, user_type)
 
 async def require_auth(authorization: str = Header(None)):
@@ -124,9 +114,7 @@ async def require_auth(authorization: str = Header(None)):
     session = verify_session(token)
     if not session:
         raise HTTPException(401, "Неверный или просроченный токен")
-    print(f"🔑 Получен заголовок: {authorization}")
     return session
-
 
 # === Приложение ===
 app = FastAPI()
@@ -196,16 +184,34 @@ async def submit_work(
         if not cur.fetchone():
             raise HTTPException(404, "Задание не найдено")
 
+        # Создаём запись, если её нет
         conn.execute("""
-            INSERT OR IGNORE INTO submissions (student_id, assignment_id)
-            VALUES (?, ?)
+            INSERT OR IGNORE INTO submissions (student_id, assignment_id, status)
+            VALUES (?, ?, 'submitted')
         """, (user_id, assignment_id))
 
+        # Получаем текущий статус
         cur = conn.execute("""
-            SELECT id FROM submissions WHERE student_id = ? AND assignment_id = ?
+            SELECT id, status FROM submissions 
+            WHERE student_id = ? AND assignment_id = ?
         """, (user_id, assignment_id))
-        submission_id = cur.fetchone()[0]
+        submission_row = cur.fetchone()
+        submission_id = submission_row[0]
+        current_status = submission_row[1]
 
+        # Определяем новый статус
+        new_status = "submitted"
+        if current_status == "rejected":
+            new_status = "resubmitted"
+
+        # Обновляем статус и время
+        conn.execute("""
+            UPDATE submissions
+            SET status = ?, submitted_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (new_status, submission_id))
+
+        # Сохраняем файлы
         file_dir = UPLOAD_BASE_DIR / str(user_id) / str(assignment_id)
         file_dir.mkdir(parents=True, exist_ok=True)
         saved_count = 0
@@ -240,8 +246,10 @@ async def get_my_assignments(session = Depends(require_auth)):
             SELECT a.id, a.title, a.description, a.deadline, s.id AS subject_id, s.name AS subject
             FROM assignments a
             JOIN subjects s ON a.subject_id = s.id
+            JOIN student_subjects ss ON s.id = ss.subject_id
+            WHERE ss.student_id = ?
             ORDER BY a.deadline
-        """)
+        """, (user_id,))
         assignments_raw = cur.fetchall()
 
         cur = conn.execute("""
@@ -249,14 +257,13 @@ async def get_my_assignments(session = Depends(require_auth)):
             FROM submissions
             WHERE student_id = ?
         """, (user_id,))
-        submission_map = {
-            row["assignment_id"]: {
+        submission_map = {}
+        for row in cur.fetchall():
+            submission_map[row["assignment_id"]] = {
                 "status": row["status"],
                 "submitted_at": row["submitted_at"],
                 "review": row["review"]
             }
-            for row in cur.fetchall()
-        }
 
         cur = conn.execute("""
             SELECT s.id AS subject_id,
@@ -274,6 +281,15 @@ async def get_my_assignments(session = Depends(require_auth)):
         """)
         teacher_map = {row["subject_id"]: row["teachers"] or "—" for row in cur.fetchall()}
 
+        # Маппинг статусов
+        STATUS_LABELS = {
+            "submitted": "Отправлено",
+            "in_review": "На рассмотрении",
+            "approved": "Зачтено",
+            "rejected": "Не зачтено",
+            "resubmitted": "Не зачтено (повторно отправлена)"
+        }
+
         return [
             {
                 "id": a["id"],
@@ -283,6 +299,7 @@ async def get_my_assignments(session = Depends(require_auth)):
                 "description": a["description"],
                 "deadline": a["deadline"],
                 "status": submission_map.get(a["id"], {}).get("status"),
+                "status_label": STATUS_LABELS.get(submission_map.get(a["id"], {}).get("status"), "—"),
                 "submitted_at": submission_map.get(a["id"], {}).get("submitted_at"),
                 "review": submission_map.get(a["id"], {}).get("review")
             }
@@ -364,7 +381,7 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
                 st.last_name || ' ' || st.first_name AS student_name,
                 st.student_id,
                 sub.submitted_at,
-                g.status AS last_status,
+                sub.status AS last_status,
                 g.graded_at AS last_action_at
             FROM assignments a
             JOIN subjects s ON a.subject_id = s.id
@@ -373,10 +390,34 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
             JOIN students st ON sub.student_id = st.id
             LEFT JOIN grades g ON g.student_id = st.id AND g.subject_id = s.id
             WHERE st_link.teacher_id = ?
-              AND (g.status IS NULL OR g.status NOT IN ('зачёт', 'сдано'))
+            AND (sub.status IS NULL OR sub.status NOT IN ('approved'))
             ORDER BY a.deadline DESC, st.last_name
         """, (user_id,))
-        return [dict(row) for row in cur.fetchall()]
+        
+        # Маппинг статусов
+        STATUS_LABELS = {
+            "submitted": "Отправлено",
+            "in_review": "На рассмотрении",
+            "approved": "Зачтено",
+            "rejected": "Не зачтено",
+            "resubmitted": "Не зачтено (повторно отправлена)"
+        }
+        
+        result = []
+        for row in cur.fetchall():
+            result.append({
+                "assignment_id": row["assignment_id"],
+                "title": row["title"],
+                "deadline": row["deadline"],
+                "subject": row["subject"],
+                "student_name": row["student_name"],
+                "student_id": row["student_id"],
+                "submitted_at": row["submitted_at"],
+                "last_status": row["last_status"],
+                "last_status_label": STATUS_LABELS.get(row["last_status"], "—"),
+                "last_action_at": row["last_action_at"]
+            })
+        return result
 
 @app.get("/api/teacher/history/me")
 async def get_my_teacher_history(session = Depends(require_auth)):

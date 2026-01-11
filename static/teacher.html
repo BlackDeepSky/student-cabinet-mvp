@@ -165,10 +165,6 @@
     // Вспомогательная функция для получения заголовков с токеном
     function getAuthHeaders() {
       const token = localStorage.getItem('teacher_token');
-      console.log('Токен преподавателя:', token);
-      if (!token) {
-        console.warn('⚠️ Токен отсутствует! Проверьте, сохраняется ли он после входа.');
-      }
       return token ? { 'Authorization': `Bearer ${token}` } : {};
     }
 
@@ -236,21 +232,18 @@
     // Загрузка работ (только актуальные)
     async function loadSubmissions() {
       try {
-        const token = localStorage.getItem('auth_token');
-        console.log('Токен при загрузке работ:', token);
-
         const res = await fetch('/api/teacher/assignments/me', {
           headers: getAuthHeaders()
         });
         if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          alert('Сессия преподавателя истекла. Пожалуйста, войдите снова.');
-          localStorage.removeItem('teacher_token');
-          localStorage.removeItem('teacher_name');
-          showLogin();
-          return;
-        }
-        throw new Error('Ошибка');
+          if (res.status === 401 || res.status === 403) {
+            alert('Сессия преподавателя истекла. Пожалуйста, войдите снова.');
+            localStorage.removeItem('teacher_token');
+            localStorage.removeItem('teacher_name');
+            showLogin();
+            return;
+          }
+          throw new Error('Ошибка загрузки работ');
         }
         const submissions = await res.json();
         const tbody = document.getElementById('submissions');
@@ -258,14 +251,17 @@
 
         submissions.forEach(row => {
           let statusBadge = '';
-          if (row.last_status) {
-            const statusMap = {
-              'принят на рассмотрение': 'in_review',
-              'зачёт': 'approved',
-              'не зачтено': 'rejected'
+          if (row.last_status_label) {
+            // Определяем CSS-класс по техническому статусу
+            const statusClassMap = {
+              'submitted': 'status-submitted',
+              'in_review': 'status-in_review',
+              'approved': 'status-approved',
+              'rejected': 'status-rejected',
+              'resubmitted': 'status-rejected'
             };
-            const cls = statusMap[row.last_status] || '';
-            statusBadge = `<span class="status-badge status-${cls}">${row.last_status}</span>`;
+            const cls = statusClassMap[row.last_status] || 'status-submitted';
+            statusBadge = `<span class="status-badge ${cls}">${row.last_status_label}</span>`;
           }
 
           let lastAction = '—';
@@ -280,7 +276,7 @@
             <td>${row.student_name}<br><small>${row.student_id}</small></td>
             <td>${row.subject}</td>
             <td>${row.title}<br><small>Дедлайн: ${new Date(row.deadline).toLocaleDateString('ru-RU')}</small></td>
-            <td>${statusBadge || row.last_status || '—'}</td>
+            <td>${statusBadge || row.last_status_label || '—'}</td>
             <td>${lastAction}</td>
             <td>
               <button class="btn btn-sm btn-outline-primary view-files" 
@@ -369,6 +365,7 @@
           });
         });
       } catch (err) {
+        console.error('Ошибка при загрузке работ:', err);
         alert('Требуется повторный вход');
         localStorage.removeItem('teacher_token');
         showLogin();
@@ -382,14 +379,14 @@
           headers: getAuthHeaders()
         });
         if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          alert('Сессия преподавателя истекла. Пожалуйста, войдите снова.');
-          localStorage.removeItem('teacher_token');
-          localStorage.removeItem('teacher_name');
-          showLogin();
-          return;
-        }
-        throw new Error('Ошибка');
+          if (res.status === 401 || res.status === 403) {
+            alert('Сессия преподавателя истекла. Пожалуйста, войдите снова.');
+            localStorage.removeItem('teacher_token');
+            localStorage.removeItem('teacher_name');
+            showLogin();
+            return;
+          }
+          throw new Error('Ошибка загрузки истории');
         }
         const history = await res.json();
         const tbody = document.getElementById('history-rows');
@@ -470,6 +467,7 @@
 
         bootstrap.Modal.getOrCreateInstance(document.getElementById('historyModal')).show();
       } catch (err) {
+        console.error('Ошибка при загрузке истории:', err);
         alert('Ошибка загрузки истории: ' + err.message);
       }
     }
@@ -506,6 +504,12 @@
         bootstrap.Modal.getInstance(document.getElementById('gradeModal')).hide();
         loadSubmissions();
       } else {
+        if (res.status === 401 || res.status === 403) {
+          alert('Сессия истекла. Пожалуйста, войдите снова.');
+          localStorage.removeItem('teacher_token');
+          showLogin();
+          return;
+        }
         const error = await res.json().catch(() => ({detail: 'Ошибка'}));
         alert('Ошибка: ' + (error.detail || 'Неизвестная ошибка'));
       }

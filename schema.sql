@@ -32,13 +32,16 @@ CREATE TABLE IF NOT EXISTS assignments (
 
 -- Отправленные работы
 CREATE TABLE IF NOT EXISTS submissions (
-    id            INTEGER PRIMARY KEY,
-    student_id    INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-    assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
-    submitted_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-    review        TEXT,
-    status        TEXT DEFAULT 'submitted' CHECK (status IN ('submitted', 'in_review', 'rejected', 'approved')),
-    UNIQUE(student_id, assignment_id)
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    assignment_id INTEGER NOT NULL,
+    status TEXT DEFAULT 'submitted',
+    submitted_at TEXT,
+    review TEXT,
+    FOREIGN KEY (student_id) REFERENCES students(id),
+    FOREIGN KEY (assignment_id) REFERENCES assignments(id),
+    UNIQUE(student_id, assignment_id),
+    CHECK (status IN ('submitted', 'in_review', 'rejected', 'approved', 'resubmitted'))
 );
 
 -- Файлы работ
@@ -86,4 +89,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_type   TEXT NOT NULL CHECK (user_type IN ('student', 'teacher')),
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     expires_at  DATETIME NOT NULL
+);
+
+-- Связь: студенты и предметы (учится ли студент на предмете)
+CREATE TABLE IF NOT EXISTS student_subjects (
+    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    PRIMARY KEY (student_id, subject_id)
 );

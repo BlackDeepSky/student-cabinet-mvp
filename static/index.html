@@ -124,7 +124,6 @@
     // Вспомогательная функция для заголовков авторизации
     function getAuthHeaders() {
       const token = localStorage.getItem('student_token');
-      console.log('🎓 Токен студента:', token ? 'да' : 'нет');
       return token ? { 'Authorization': `Bearer ${token}` } : {};
     }
 
@@ -140,16 +139,16 @@
 
     // Инициализация при загрузке страницы
     window.addEventListener('load', () => {
-    const token = localStorage.getItem('student_token');
-    const name = localStorage.getItem('student_name');
-    if (token && name) {
-      document.getElementById('student-name').textContent = name;
-      loadAssignments();
-      loadGrades();
-      showMain();
-    } else {
-      showLogin();
-    }
+      const token = localStorage.getItem('student_token');
+      const name = localStorage.getItem('student_name');
+      if (token && name) {
+        document.getElementById('student-name').textContent = name;
+        loadAssignments();
+        loadGrades();
+        showMain();
+      } else {
+        showLogin();
+      }
     });
 
     // Вход
@@ -184,130 +183,151 @@
 
     // Выход
     document.getElementById('logout-btn').addEventListener('click', () => {
-      localStorage.removeItem('auth_token');
+      localStorage.removeItem('student_token');
       localStorage.removeItem('student_name');
       showLogin();
     });
 
     // Загрузка заданий
-    async function loadAssignments() {
-      try {
-        const res = await fetch('/api/assignments/me', { headers: getAuthHeaders() });
-        if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          alert('Сессия истекла. Пожалуйста, войдите снова.');
-          localStorage.removeItem('student_token');
-          localStorage.removeItem('student_name');
-          showLogin();
-          return;
-        }
-        throw new Error('Ошибка загрузки');
-      }
-        const assignments = await res.json();
-        const cont = document.getElementById('assignments');
-        cont.innerHTML = '';
-
-        assignments.forEach(a => {
-          const deadline = new Date(a.deadline).toLocaleDateString('ru-RU');
-          const submittedAt = a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('ru-RU') : null;
-
-          let statusBadge = '';
-          if (a.status) {
-            const dateStr = submittedAt ? ` (${submittedAt})` : '';
-            switch(a.status) {
-              case 'submitted': statusBadge = `<span class="status-badge status-submitted">Отправлено${dateStr}</span>`; break;
-              case 'in_review': statusBadge = `<span class="status-badge status-in_review">На рассмотрении${dateStr}</span>`; break;
-              case 'approved': statusBadge = `<span class="status-badge status-approved">Зачтено${dateStr}</span>`; break;
-              case 'rejected': statusBadge = `<span class="status-badge status-rejected">Не зачтено${dateStr}</span>`; break;
-            }
-          }
-
-          let reviewBlock = '';
-          if (a.status === 'rejected' && a.review) {
-            reviewBlock = `<div class="review-block"><strong>Рецензия:</strong> ${a.review}</div>`;
-          }
-
-          let actionBlock = '';
-          if (a.status === 'approved') {
-            // Ничего не показываем
-          } else if (a.status === 'in_review') {
-            actionBlock = '<p class="text-muted">Работа проверяется преподавателем</p>';
-          } else {
-            actionBlock = `
-              <form class="submit-form" data-assignment-id="${a.id}">
-                <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
-                <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
-              </form>
-            `;
-          }
-
-          const el = document.createElement('div');
-          el.className = 'card mb-3';
-          el.innerHTML = `
-            <div class="card-body">
-              <h6 class="text-muted">${a.subject}</h6>
-              <p class="text-muted mb-2">Преподаватель: ${a.teachers}</p>
-              <h5>${a.title} ${statusBadge}</h5>
-              <p>${a.description}</p>
-              <p><small>Дедлайн: ${deadline}</small></p>
-              ${reviewBlock}
-              ${actionBlock}
-            </div>
-          `;
-          cont.appendChild(el);
-        });
-
-        // Обработчики отправки
-        document.querySelectorAll('.submit-form').forEach(form => {
-          form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const assignmentId = e.target.dataset.assignmentId;
-            const files = Array.from(e.target.querySelector('input[type="file"]').files);
-            if (!files.length) return;
-
-            const formData = new FormData();
-            files.forEach(f => formData.append('files', f));
-
-            // Для FormData НЕЛЬЗЯ указывать Content-Type вручную!
-            const res = await fetch(`/api/submit/${assignmentId}`, {
-              method: 'POST',
-              headers: {
-                // Передаём только Authorization, но НЕ Content-Type
-                ...getAuthHeaders()
-                // Content-Type будет установлен автоматически как multipart/form-data; boundary=...
-              },
-              body: formData
-            });
-
-            if (res.ok) {
-              alert('Работа отправлена!');
-              loadAssignments();
-            } else {
-              const err = await res.json().catch(() => ({detail: 'Неизвестная ошибка'}));
-              alert('Ошибка: ' + (err.detail || ''));
-            }
-          });
-        });
-      } catch (err) {
-        alert('Требуется повторный вход');
-        localStorage.removeItem('auth_token');
+  // Загрузка заданий
+// Загрузка заданий
+async function loadAssignments() {
+  try {
+    const res = await fetch('/api/assignments/me', { headers: getAuthHeaders() });
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        alert('Сессия истекла. Пожалуйста, войдите снова.');
+        localStorage.removeItem('student_token');
+        localStorage.removeItem('student_name');
         showLogin();
+        return;
       }
+      throw new Error('Ошибка загрузки');
     }
+    const assignments = await res.json();
+    const cont = document.getElementById('assignments');
+    cont.innerHTML = '';
+
+    for (const a of assignments) {
+      const deadline = new Date(a.deadline).toLocaleDateString('ru-RU');
+      const submittedAt = a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('ru-RU') : null;
+      const dateStr = submittedAt ? ` (${submittedAt})` : ''; // ← ОПРЕДЕЛЕНА ДЛЯ ВСЕХ
+
+      let statusBadge = '';
+      if (a.status_label && a.status_label !== '—') {
+        let statusClass = 'status-submitted';
+        const classMap = {
+          'submitted': 'status-submitted',
+          'in_review': 'status-in_review',
+          'approved': 'status-approved',
+          'rejected': 'status-rejected',
+          'resubmitted': 'status-rejected'
+        };
+        statusClass = classMap[a.status] || 'status-submitted';
+        statusBadge = `<span class="status-badge ${statusClass}">${a.status_label}${dateStr}</span>`;
+      } else {
+        statusBadge = `<span class="status-badge status-submitted">Не отправлено</span>`;
+      }
+
+      let reviewBlock = '';
+      if ((a.status === 'rejected' || a.status === 'resubmitted') && a.review) {
+        reviewBlock = `<div class="review-block"><strong>Рецензия:</strong> ${a.review}</div>`;
+      }
+
+      let actionBlock = '';
+      if (a.status === 'approved') {
+        // ничего
+      } else if (a.status === 'in_review') {
+        actionBlock = '<p class="text-muted">Работа проверяется преподавателем</p>';
+      } else {
+        actionBlock = `
+        <form class="submit-form" data-assignment-id="${a.id}">
+          <input type="file" class="form-control form-control-sm d-inline-block w-auto me-2" multiple required>
+          <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+        </form>
+      `;
+      }
+
+      const el = document.createElement('div');
+      el.className = 'card mb-3';
+      el.innerHTML = `
+        <div class="card-body">
+          <h6 class="text-muted">${a.subject}</h6>
+          <p class="text-muted mb-2">Преподаватель: ${a.teachers}</p>
+          <h5>${a.title} ${statusBadge}</h5>
+          <p>${a.description}</p>
+          <p><small>Дедлайн: ${deadline}</small></p>
+          ${reviewBlock}
+          ${actionBlock}
+        </div>
+      `;
+      cont.appendChild(el);
+    }
+
+    // Обработчики
+    document.querySelectorAll('.submit-form').forEach(form => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const assignmentId = e.target.dataset.assignmentId;
+        const files = Array.from(e.target.querySelector('input[type="file"]').files);
+        if (!files.length) return;
+
+        const formData = new FormData();
+        files.forEach(f => formData.append('files', f));
+
+        try {
+          const res = await fetch(`/api/submit/${assignmentId}`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: formData
+          });
+
+          if (res.ok) {
+            alert('Работа отправлена!');
+            loadAssignments();
+          } else {
+            if (res.status === 401 || res.status === 403) {
+              alert('Сессия истекла. Пожалуйста, войдите снова.');
+              localStorage.removeItem('student_token');
+              localStorage.removeItem('student_name');
+              showLogin();
+              return;
+            }
+            const err = await res.json().catch(() => ({detail: 'Неизвестная ошибка'}));
+            alert('Ошибка: ' + (err.detail || ''));
+          }
+        } catch (err) {
+          console.error('Ошибка при отправке:', err);
+          alert('Не удалось отправить работу. Проверьте соединение.');
+        }
+      });
+    });
+  } catch (err) {
+    console.error('Ошибка при загрузке заданий:', err);
+    if (err.message.includes('401') || err.message.includes('403')) {
+      alert('Сессия истекла. Пожалуйста, войдите снова.');
+      localStorage.removeItem('student_token');
+      localStorage.removeItem('student_name');
+      showLogin();
+    } else {
+      alert('Ошибка загрузки заданий: ' + err.message);
+    }
+  }
+}
 
     // Загрузка успеваемости
     async function loadGrades() {
       try {
         const res = await fetch('/api/grades/me', { headers: getAuthHeaders() });
         if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          alert('Сессия истекла. Пожалуйста, войдите снова.');
-          localStorage.removeItem('student_token');
-          localStorage.removeItem('student_name');
-          showLogin();
-          return;
-        }
-        throw new Error('Ошибка загрузки');
+          if (res.status === 401 || res.status === 403) {
+            alert('Сессия истекла. Пожалуйста, войдите снова.');
+            localStorage.removeItem('student_token');
+            localStorage.removeItem('student_name');
+            showLogin();
+            return;
+          }
+          throw new Error('Ошибка загрузки');
         }
         const grades = await res.json();
         const tbody = document.getElementById('grades');

@@ -97,3 +97,11 @@ CREATE TABLE IF NOT EXISTS student_subjects (
     subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     PRIMARY KEY (student_id, subject_id)
 );
+
+CREATE TABLE IF NOT EXISTS teacher_feedback_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    submission_id INTEGER NOT NULL,
+    file_path TEXT NOT NULL,
+    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE
+);

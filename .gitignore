@@ -33,6 +33,7 @@ instance/
 
 # Файлы загрузок (работы студентов)
 storage/submissions/
+storage/feedback/
 
 # IDE и редакторы
 .vscode/

@@ -23,6 +23,7 @@ def get_current_time():
 # === Константы ===
 DB_PATH = Path("instance/app.db")
 UPLOAD_BASE_DIR = Path("storage/submissions")
+FEEDBACK_DIR = Path("storage/feedback")
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 МБ
 VALID_ID_PATTERN = re.compile(r"^[A-Za-z0-9\-_]+$")
 SESSION_EXPIRE_HOURS = 24
@@ -30,6 +31,7 @@ SESSION_EXPIRE_HOURS = 24
 # Убедимся, что папки существуют
 DB_PATH.parent.mkdir(exist_ok=True)
 UPLOAD_BASE_DIR.mkdir(parents=True, exist_ok=True)
+FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
 
 # === Безопасная инициализация БД ===
 def init_database_if_needed():
@@ -252,19 +254,35 @@ async def get_my_assignments(session = Depends(require_auth)):
         """, (user_id,))
         assignments_raw = cur.fetchall()
 
+        # Получаем все ID заданий
+        all_assignment_ids = [a["id"] for a in assignments_raw]
+
+        # Получаем статусы и submission_id
         cur = conn.execute("""
-            SELECT assignment_id, status, submitted_at, review
+            SELECT id, assignment_id, status, submitted_at, review
             FROM submissions
             WHERE student_id = ?
         """, (user_id,))
         submission_map = {}
         for row in cur.fetchall():
             submission_map[row["assignment_id"]] = {
+                "submission_id": row["id"],
                 "status": row["status"],
                 "submitted_at": row["submitted_at"],
                 "review": row["review"]
             }
 
+        # Гарантируем, что каждое задание есть в мапе
+        for aid in all_assignment_ids:
+            if aid not in submission_map:
+                submission_map[aid] = {
+                    "submission_id": None,
+                    "status": None,
+                    "submitted_at": None,
+                    "review": None
+                }
+
+        # Преподаватели по предметам
         cur = conn.execute("""
             SELECT s.id AS subject_id,
                    GROUP_CONCAT(
@@ -280,6 +298,17 @@ async def get_my_assignments(session = Depends(require_auth)):
             GROUP BY s.id
         """)
         teacher_map = {row["subject_id"]: row["teachers"] or "—" for row in cur.fetchall()}
+        
+        # Проверяем наличие файлов от преподавателя
+        submission_ids = [v["submission_id"] for v in submission_map.values() if v["submission_id"]]
+        has_feedback = set()
+        if submission_ids:
+            placeholders = ','.join('?' * len(submission_ids))
+            cur = conn.execute(f"""
+                SELECT submission_id FROM teacher_feedback_files
+                WHERE submission_id IN ({placeholders})
+            """, submission_ids)
+            has_feedback = {row[0] for row in cur.fetchall()}
 
         # Маппинг статусов
         STATUS_LABELS = {
@@ -298,10 +327,12 @@ async def get_my_assignments(session = Depends(require_auth)):
                 "title": a["title"],
                 "description": a["description"],
                 "deadline": a["deadline"],
-                "status": submission_map.get(a["id"], {}).get("status"),
-                "status_label": STATUS_LABELS.get(submission_map.get(a["id"], {}).get("status"), "—"),
-                "submitted_at": submission_map.get(a["id"], {}).get("submitted_at"),
-                "review": submission_map.get(a["id"], {}).get("review")
+                "status": submission_map[a["id"]]["status"],
+                "status_label": STATUS_LABELS.get(submission_map[a["id"]]["status"], "Не отправлено"),
+                "submitted_at": submission_map[a["id"]]["submitted_at"],
+                "review": submission_map[a["id"]]["review"],
+                "submission_id": submission_map[a["id"]]["submission_id"],
+                "has_teacher_feedback": submission_map[a["id"]]["submission_id"] in has_feedback
             }
             for a in assignments_raw
         ]
@@ -545,6 +576,90 @@ async def set_grade(
         """, (student_id_int, subject_id_int, grade_value, status_input, review))
 
         return {"message": "Статус и рецензия сохранены"}
+
+# ===== ФАЙЛЫ ОБРАТНОЙ СВЯЗИ ОТ ПРЕПОДАВАТЕЛЯ =====
+
+@app.post("/api/teacher/feedback/{assignment_id}/{student_id}")
+async def upload_feedback_file(
+    assignment_id: int,
+    student_id: str,
+    file: UploadFile = File(...),
+    session = Depends(require_auth)
+):
+    user_id, user_type = session
+    if user_type != "teacher":
+        raise HTTPException(403, "Доступ запрещён")
+    
+    clean_student_id = validate_id(student_id)
+    if not file.filename:
+        raise HTTPException(400, "Файл не выбран")
+    
+    if file.size > MAX_FILE_SIZE:
+        raise HTTPException(400, f"Файл слишком большой (макс. 10 МБ)")
+
+    with get_db() as conn:
+        # Проверяем, что преподаватель ведёт этот предмет у этого студента
+        cur = conn.execute("""
+            SELECT s.id
+            FROM submissions s
+            JOIN assignments a ON s.assignment_id = a.id
+            JOIN subjects subj ON a.subject_id = subj.id
+            JOIN subject_teachers st ON subj.id = st.subject_id
+            JOIN students stud ON s.student_id = stud.id
+            WHERE s.assignment_id = ? AND stud.student_id = ? AND st.teacher_id = ?
+        """, (assignment_id, clean_student_id, user_id))
+        submission_row = cur.fetchone()
+        if not submission_row:
+            raise HTTPException(403, "Нет доступа к этой работе")
+        
+        submission_id = submission_row[0]
+
+        # Сохраняем файл
+        feedback_dir = FEEDBACK_DIR / str(clean_student_id) / str(assignment_id)
+        feedback_dir.mkdir(parents=True, exist_ok=True)
+
+        safe_name = sanitize_filename(file.filename)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_{safe_name}"
+        file_path = feedback_dir / filename
+
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # Сохраняем в БД
+        conn.execute("""
+            INSERT INTO teacher_feedback_files (submission_id, file_path)
+            VALUES (?, ?)
+        """, (submission_id, str(file_path)))
+
+        return {"message": "Файл комментария сохранён"}
+
+@app.get("/api/download/feedback/{submission_id}")
+async def download_feedback_file(submission_id: int, session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "student":
+        raise HTTPException(403, "Доступ запрещён")
+    
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT tf.file_path, s.student_id
+            FROM teacher_feedback_files tf
+            JOIN submissions s ON tf.submission_id = s.id
+            WHERE tf.submission_id = ?
+        """, (submission_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Файл не найден")
+        
+        file_path, student_id = row
+        if student_id != user_id:
+            raise HTTPException(403, "Нет доступа к этому файлу")
+        
+        full_path = Path(file_path)
+        if not full_path.is_file():
+            raise HTTPException(404, "Файл удалён")
+        
+        return FileResponse(full_path, filename=full_path.name)
 
 # ===== СКАЧИВАНИЕ ФАЙЛОВ =====
 

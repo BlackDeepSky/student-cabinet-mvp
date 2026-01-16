@@ -110,6 +110,10 @@
               <label class="form-label">Рецензия (если не зачтено)</label>
               <textarea class="form-control" id="review" rows="3"></textarea>
             </div>
+            <div class="mb-3" id="feedback-file-block" style="display:none;">
+              <label class="form-label">Файл с комментарием (опционально)</label>
+              <input type="file" class="form-control" id="feedback-file">
+            </div>
             <button type="submit" class="btn btn-primary">Сохранить</button>
           </form>
         </div>
@@ -361,6 +365,30 @@
             document.getElementById('modal-subject-name').value = e.target.dataset.subjectName;
             document.getElementById('modal-assignment-id').value = e.target.dataset.assignmentId;
             document.getElementById('review').value = '';
+            
+            // Сброс файла
+            document.getElementById('feedback-file').value = '';
+            
+            // Показ/скрытие блока файла
+            const statusSelect = document.getElementById('status-input');
+            const feedbackBlock = document.getElementById('feedback-file-block');
+            const currentStatus = e.target.closest('tr').querySelector('.status-badge')?.textContent || '';
+            if (currentStatus.includes('Не зачтено')) {
+              feedbackBlock.style.display = 'block';
+            } else {
+              feedbackBlock.style.display = 'none';
+            }
+            
+            // Слушатель изменения статуса
+            statusSelect.onchange = () => {
+              if (statusSelect.value === 'не зачтено') {
+                feedbackBlock.style.display = 'block';
+              } else {
+                feedbackBlock.style.display = 'none';
+                document.getElementById('feedback-file').value = '';
+              }
+            };
+            
             bootstrap.Modal.getOrCreateInstance(modal).show();
           });
         });
@@ -483,8 +511,10 @@
       const assignmentId = document.getElementById('modal-assignment-id').value;
       const statusInput = document.getElementById('status-input').value;
       const review = document.getElementById('review').value;
+      const feedbackFile = document.getElementById('feedback-file').files[0];
 
-      const res = await fetch('/api/teacher/grade', {
+      // Сначала сохраняем статус
+      const gradeRes = await fetch('/api/teacher/grade', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -499,20 +529,37 @@
         })
       });
 
-      if (res.ok) {
-        alert('Статус сохранён');
-        bootstrap.Modal.getInstance(document.getElementById('gradeModal')).hide();
-        loadSubmissions();
-      } else {
-        if (res.status === 401 || res.status === 403) {
+      if (!gradeRes.ok) {
+        if (gradeRes.status === 401 || gradeRes.status === 403) {
           alert('Сессия истекла. Пожалуйста, войдите снова.');
           localStorage.removeItem('teacher_token');
           showLogin();
           return;
         }
-        const error = await res.json().catch(() => ({detail: 'Ошибка'}));
+        const error = await gradeRes.json().catch(() => ({detail: 'Ошибка'}));
         alert('Ошибка: ' + (error.detail || 'Неизвестная ошибка'));
+        return;
       }
+
+      // Если статус "не зачтено" и есть файл — загружаем его
+      if (statusInput === 'не зачтено' && feedbackFile) {
+        const formData = new FormData();
+        formData.append('file', feedbackFile);
+        
+        const feedbackRes = await fetch(`/api/teacher/feedback/${assignmentId}/${studentId}`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: formData
+        });
+        
+        if (!feedbackRes.ok) {
+          alert('Файл комментария не сохранён: ' + (await feedbackRes.json()).detail);
+        }
+      }
+
+      alert('Статус сохранён');
+      bootstrap.Modal.getInstance(document.getElementById('gradeModal')).hide();
+      loadSubmissions();
     });
   </script>
 </body>

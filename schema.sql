@@ -7,8 +7,9 @@ CREATE TABLE IF NOT EXISTS students (
     patronymic   TEXT,
     email        TEXT UNIQUE,
     group_name   TEXT,
-    birth_date   TEXT,
-    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+    birth_date     TEXT,
+    password_hash  TEXT NOT NULL DEFAULT '',
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Предметы
@@ -67,12 +68,13 @@ CREATE TABLE IF NOT EXISTS grades (
 -- Преподаватели
 CREATE TABLE IF NOT EXISTS teachers (
     id         INTEGER PRIMARY KEY,
-    teacher_id TEXT NOT NULL UNIQUE,
-    last_name  TEXT NOT NULL,
-    first_name TEXT NOT NULL,
-    patronymic TEXT,
-    birth_date TEXT,
-    email      TEXT UNIQUE
+    teacher_id    TEXT NOT NULL UNIQUE,
+    last_name     TEXT NOT NULL,
+    first_name    TEXT NOT NULL,
+    patronymic    TEXT,
+    birth_date    TEXT,
+    password_hash TEXT NOT NULL DEFAULT '',
+    email         TEXT UNIQUE
 );
 
 -- Связь: кто ведёт какой предмет

@@ -15,6 +15,11 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
+import bcrypt as _bcrypt
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    return _bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
 # === Вспомогательные функции для времени ===
 def get_current_time():
@@ -61,22 +66,6 @@ def validate_id(user_id: str) -> str:
     if not id_clean or not VALID_ID_PATTERN.match(id_clean):
         raise HTTPException(400, "Некорректный идентификатор")
     return id_clean
-
-def normalize_birth_date(raw: str) -> Optional[str]:
-    if not raw:
-        return None
-    raw = re.sub(r"[^\d]", "", raw.strip())
-    if len(raw) == 8:
-        day, month, year = raw[:2], raw[2:4], raw[4:]
-    elif len(raw) == 6:
-        day, month, year = raw[:2], raw[2:4], "20" + raw[4:] if int(raw[4:]) <= 25 else "19" + raw[4:]
-    else:
-        return None
-    try:
-        dt = datetime(int(year), int(month), int(day))
-        return dt.strftime("%Y-%m-%d")
-    except ValueError:
-        return None
 
 def create_session(user_id: int, user_type: str) -> str:
     token = secrets.token_urlsafe(32)
@@ -148,24 +137,22 @@ async def teacher_page():
 @app.post("/api/login")
 async def login(student_id: str = Form(...), password: str = Form(...)):
     clean_id = validate_id(student_id)
-    birth_date = normalize_birth_date(password)
-    if not birth_date:
-        raise HTTPException(400, "Неверный формат даты рождения. Используйте ДД.ММ.ГГГГ")
 
     with get_db() as conn:
         cur = conn.execute("""
-            SELECT id, last_name, first_name, patronymic
+            SELECT id, last_name, first_name, patronymic, password_hash
             FROM students
-            WHERE student_id = ? AND birth_date = ?
-        """, (clean_id, birth_date))
+            WHERE student_id = ?
+        """, (clean_id,))
         student = cur.fetchone()
-        if not student:
-            raise HTTPException(401, "Неверный номер студенческого или дата рождения")
-        
+        if not student or not verify_password(password, student["password_hash"]):
+            raise HTTPException(401, "Неверный номер студенческого или пароль")
+
         token = create_session(student["id"], "student")
+        user = {k: student[k] for k in ("id", "last_name", "first_name", "patronymic")}
         return {
             "token": token,
-            "user": dict(student)
+            "user": user
         }
 
 @app.post("/api/submit/{assignment_id}")
@@ -375,24 +362,22 @@ async def get_my_grades(session = Depends(require_auth)):
 @app.post("/api/teacher/login")
 async def teacher_login(teacher_id: str = Form(...), password: str = Form(...)):
     clean_id = validate_id(teacher_id)
-    birth_date = normalize_birth_date(password)
-    if not birth_date:
-        raise HTTPException(400, "Неверный формат даты рождения. Используйте ДД.ММ.ГГГГ")
 
     with get_db() as conn:
         cur = conn.execute("""
-            SELECT id, last_name, first_name, patronymic
+            SELECT id, last_name, first_name, patronymic, password_hash
             FROM teachers
-            WHERE teacher_id = ? AND birth_date = ?
-        """, (clean_id, birth_date))
+            WHERE teacher_id = ?
+        """, (clean_id,))
         teacher = cur.fetchone()
-        if not teacher:
-            raise HTTPException(401, "Неверный ID преподавателя или дата рождения")
-        
+        if not teacher or not verify_password(password, teacher["password_hash"]):
+            raise HTTPException(401, "Неверный ID преподавателя или пароль")
+
         token = create_session(teacher["id"], "teacher")
+        user = {k: teacher[k] for k in ("id", "last_name", "first_name", "patronymic")}
         return {
             "token": token,
-            "user": dict(teacher)
+            "user": user
         }
 
 # Эндпоинты для преподавателей (/me)

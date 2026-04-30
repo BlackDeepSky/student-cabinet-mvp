@@ -4,6 +4,11 @@
 
 import sqlite3
 from pathlib import Path
+import bcrypt as _bcrypt
+
+
+def hash_password(password: str) -> str:
+    return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
 
 # Определяем корень проекта и пути
 BASE_DIR = Path(__file__).resolve().parent
@@ -30,26 +35,34 @@ def seed_data():
         cur = conn.cursor()
 
         # === Студенты ===
+        students_raw = [
+            ("2023-IS-042", "Иванов", "Иван", "Иванович", "ivanov@example.com", "ИС-31", "2001-05-15", "15052001"),
+            ("2023-IS-043", "Петрова", "Мария", "Сергеевна", "petrova@example.com", "ИС-31", "2002-11-23", "23112002"),
+            ("2023-ЭК-115", "Сидоров", "Алексей", None, "sidorov@example.com", "ЭК-22", "2000-08-30", "30082000"),
+        ]
         students = [
-            ("2023-IS-042", "Иванов", "Иван", "Иванович", "ivanov@example.com", "ИС-31", "2001-05-15"),
-            ("2023-IS-043", "Петрова", "Мария", "Сергеевна", "petrova@example.com", "ИС-31", "2002-11-23"),
-            ("2023-ЭК-115", "Сидоров", "Алексей", None, "sidorov@example.com", "ЭК-22", "2000-08-30"),
+            (sid, ln, fn, pat, email, grp, bd, hash_password(pwd))
+            for sid, ln, fn, pat, email, grp, bd, pwd in students_raw
         ]
         cur.executemany("""
-            INSERT OR IGNORE INTO students 
-            (student_id, last_name, first_name, patronymic, email, group_name, birth_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO students
+            (student_id, last_name, first_name, patronymic, email, group_name, birth_date, password_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, students)
 
         # === Преподаватели ===
+        teachers_raw = [
+            ("T-MATH-01", "Смирнов", "Пётр", "Алексеевич", "smirnov@example.com", "1975-03-12", "12031975"),
+            ("T-CS-02", "Козлова", "Елена", "Викторовна", "kozlova@example.com", "1982-07-19", "19071982"),
+        ]
         teachers = [
-            ("T-MATH-01", "Смирнов", "Пётр", "Алексеевич", "smirnov@example.com", "1975-03-12"),
-            ("T-CS-02", "Козлова", "Елена", "Викторовна", "kozlova@example.com", "1982-07-19"),
+            (tid, ln, fn, pat, email, bd, hash_password(pwd))
+            for tid, ln, fn, pat, email, bd, pwd in teachers_raw
         ]
         cur.executemany("""
-            INSERT OR IGNORE INTO teachers 
-            (teacher_id, last_name, first_name, patronymic, email, birth_date)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO teachers
+            (teacher_id, last_name, first_name, patronymic, email, birth_date, password_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, teachers)
 
         # === Предметы ===

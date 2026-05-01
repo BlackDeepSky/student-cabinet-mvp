@@ -1,42 +1,64 @@
 """
 Личный кабинет заочного студента — MVP
-Backend на FastAPI + PostgreSQL
+Backend на FastAPI + PostgreSQL + Cloudflare R2
 """
 
 import os
-import shutil
 import re
 import secrets
 from datetime import timedelta, datetime
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Header
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 import bcrypt as _bcrypt
 import psycopg2
 from psycopg2.extras import DictCursor
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
 
 
 def verify_password(password: str, hashed: str) -> bool:
     return _bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
 # === Константы ===
-UPLOAD_BASE_DIR = Path("storage/submissions")
-FEEDBACK_DIR = Path("storage/feedback")
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 МБ
 VALID_ID_PATTERN = re.compile(r"^[A-Za-z0-9\-_]+$")
 SESSION_EXPIRE_HOURS = 24
-
-# Убедимся, что папки существуют
-UPLOAD_BASE_DIR.mkdir(parents=True, exist_ok=True)
-FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
 
 # === Настройка БД ===
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# === Настройка Cloudflare R2 ===
+R2_BUCKET = os.environ.get("R2_BUCKET", "")
+_r2_client = None
+
+
+def get_r2():
+    global _r2_client
+    if _r2_client is None:
+        endpoint = os.environ.get("R2_ENDPOINT_URL")
+        key_id = os.environ.get("R2_ACCESS_KEY_ID")
+        secret = os.environ.get("R2_SECRET_ACCESS_KEY")
+        if not all([endpoint, key_id, secret, R2_BUCKET]):
+            raise RuntimeError(
+                "R2 не настроен: укажите R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, "
+                "R2_SECRET_ACCESS_KEY, R2_BUCKET"
+            )
+        _r2_client = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=key_id,
+            aws_secret_access_key=secret,
+            config=Config(signature_version="s3v4"),
+            region_name="auto",
+        )
+    return _r2_client
 
 
 class DBConnection:
@@ -144,6 +166,21 @@ async def require_auth(authorization: str = Header(None)):
         raise HTTPException(401, "Неверный или просроченный токен")
     return session
 
+def _r2_stream(r2_key: str, filename: str) -> StreamingResponse:
+    """Стримит файл из R2 клиенту."""
+    try:
+        obj = get_r2().get_object(Bucket=R2_BUCKET, Key=r2_key)
+        return StreamingResponse(
+            obj["Body"],
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code in ("NoSuchKey", "404"):
+            raise HTTPException(404, "Файл не найден")
+        raise HTTPException(500, "Ошибка хранилища")
+
 # === Приложение ===
 app = FastAPI()
 
@@ -187,10 +224,7 @@ async def login(student_id: str = Form(...), password: str = Form(...)):
 
         token = create_session(student["id"], "student")
         user = {k: student[k] for k in ("id", "last_name", "first_name", "patronymic")}
-        return {
-            "token": token,
-            "user": user
-        }
+        return {"token": token, "user": user}
 
 @app.post("/api/submit/{assignment_id}")
 async def submit_work(
@@ -210,14 +244,12 @@ async def submit_work(
         if not cur.fetchone():
             raise HTTPException(404, "Задание не найдено")
 
-        # Создаём запись, если её нет
         conn.execute("""
             INSERT INTO submissions (student_id, assignment_id, status)
             VALUES (%s, %s, 'submitted')
             ON CONFLICT (student_id, assignment_id) DO NOTHING
         """, (user_id, assignment_id))
 
-        # Получаем текущий статус
         cur = conn.execute("""
             SELECT id, status FROM submissions
             WHERE student_id = %s AND assignment_id = %s
@@ -226,21 +258,15 @@ async def submit_work(
         submission_id = submission_row[0]
         current_status = submission_row[1]
 
-        # Определяем новый статус
-        new_status = "submitted"
-        if current_status == "rejected":
-            new_status = "resubmitted"
+        new_status = "resubmitted" if current_status == "rejected" else "submitted"
 
-        # Обновляем статус и время
         conn.execute("""
             UPDATE submissions
             SET status = %s, submitted_at = CURRENT_TIMESTAMP
             WHERE id = %s
         """, (new_status, submission_id))
 
-        # Сохраняем файлы
-        file_dir = UPLOAD_BASE_DIR / str(user_id) / str(assignment_id)
-        file_dir.mkdir(parents=True, exist_ok=True)
+        r2 = get_r2()
         saved_count = 0
         for file in files:
             if not file.filename:
@@ -249,14 +275,12 @@ async def submit_work(
                 raise HTTPException(400, f"Файл {file.filename} слишком большой (макс. 10 МБ)")
             safe_name = sanitize_filename(file.filename)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{timestamp}_{safe_name}"
-            file_path = file_dir / filename
-            with open(file_path, "wb") as f:
-                shutil.copyfileobj(file.file, f)
+            r2_key = f"submissions/{user_id}/{assignment_id}/{timestamp}_{safe_name}"
+            r2.upload_fileobj(file.file, R2_BUCKET, r2_key)
             conn.execute("""
                 INSERT INTO submission_files (submission_id, file_path)
                 VALUES (%s, %s)
-            """, (submission_id, str(file_path)))
+            """, (submission_id, r2_key))
             saved_count += 1
 
         return {"message": f"Отправлено {saved_count} файлов"}
@@ -279,10 +303,8 @@ async def get_my_assignments(session = Depends(require_auth)):
         """, (user_id,))
         assignments_raw = cur.fetchall()
 
-        # Получаем все ID заданий
         all_assignment_ids = [a["id"] for a in assignments_raw]
 
-        # Получаем статусы и submission_id
         cur = conn.execute("""
             SELECT id, assignment_id, status, submitted_at, review
             FROM submissions
@@ -297,7 +319,6 @@ async def get_my_assignments(session = Depends(require_auth)):
                 "review": row["review"]
             }
 
-        # Гарантируем, что каждое задание есть в мапе
         for aid in all_assignment_ids:
             if aid not in submission_map:
                 submission_map[aid] = {
@@ -307,7 +328,6 @@ async def get_my_assignments(session = Depends(require_auth)):
                     "review": None
                 }
 
-        # Преподаватели по предметам
         cur = conn.execute("""
             SELECT s.id AS subject_id,
                    STRING_AGG(
@@ -324,7 +344,6 @@ async def get_my_assignments(session = Depends(require_auth)):
         """)
         teacher_map = {row["subject_id"]: row["teachers"] or "—" for row in cur.fetchall()}
 
-        # Проверяем наличие файлов от преподавателя
         submission_ids = [v["submission_id"] for v in submission_map.values() if v["submission_id"]]
         has_feedback = set()
         if submission_ids:
@@ -335,7 +354,6 @@ async def get_my_assignments(session = Depends(require_auth)):
             """, submission_ids)
             has_feedback = {row[0] for row in cur.fetchall()}
 
-        # Маппинг статусов
         STATUS_LABELS = {
             "submitted": "Отправлено",
             "in_review": "На рассмотрении",
@@ -386,8 +404,7 @@ async def get_my_grades(session = Depends(require_auth)):
                     formatted_date = graded_at.strftime("%d.%m.%Y, %H:%M")
                 else:
                     try:
-                        dt = datetime.fromisoformat(str(graded_at))
-                        formatted_date = dt.strftime("%d.%m.%Y, %H:%M")
+                        formatted_date = datetime.fromisoformat(str(graded_at)).strftime("%d.%m.%Y, %H:%M")
                     except ValueError:
                         pass
             grades.append({
@@ -416,12 +433,8 @@ async def teacher_login(teacher_id: str = Form(...), password: str = Form(...)):
 
         token = create_session(teacher["id"], "teacher")
         user = {k: teacher[k] for k in ("id", "last_name", "first_name", "patronymic")}
-        return {
-            "token": token,
-            "user": user
-        }
+        return {"token": token, "user": user}
 
-# Эндпоинты для преподавателей (/me)
 @app.get("/api/teacher/assignments/me")
 async def get_my_teacher_assignments(session = Depends(require_auth)):
     user_id, user_type = session
@@ -451,7 +464,6 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
             ORDER BY a.deadline DESC, st.last_name
         """, (user_id,))
 
-        # Маппинг статусов
         STATUS_LABELS = {
             "submitted": "Отправлено",
             "in_review": "На рассмотрении",
@@ -523,7 +535,7 @@ async def get_submission_files(
         """, (assignment_id, clean_id))
         return [
             {
-                "path": row[0].replace("storage/", "", 1),
+                "path": row[0],
                 "name": os.path.basename(row[0])
             }
             for row in cur.fetchall()
@@ -558,18 +570,24 @@ async def set_grade(
 
         if status_input == "не зачтено":
             cur = conn.execute("""
-                SELECT s.id FROM submissions s
-                WHERE s.student_id = %s AND s.assignment_id = %s
+                SELECT id FROM submissions
+                WHERE student_id = %s AND assignment_id = %s
             """, (student_id_int, assignment_id))
             submission_row = cur.fetchone()
             if submission_row:
                 submission_id = submission_row[0]
-                cur = conn.execute("SELECT file_path FROM submission_files WHERE submission_id = %s", (submission_id,))
-                file_paths = [row[0] for row in cur.fetchall()]
-                for fp in file_paths:
+                cur = conn.execute(
+                    "SELECT file_path FROM submission_files WHERE submission_id = %s",
+                    (submission_id,)
+                )
+                r2_keys = [row[0] for row in cur.fetchall()]
+                if r2_keys:
                     try:
-                        os.remove(fp)
-                    except (FileNotFoundError, OSError):
+                        get_r2().delete_objects(
+                            Bucket=R2_BUCKET,
+                            Delete={"Objects": [{"Key": k} for k in r2_keys]},
+                        )
+                    except ClientError:
                         pass
                 conn.execute("DELETE FROM submission_files WHERE submission_id = %s", (submission_id,))
 
@@ -619,12 +637,10 @@ async def upload_feedback_file(
     clean_student_id = validate_id(student_id)
     if not file.filename:
         raise HTTPException(400, "Файл не выбран")
-
     if file.size > MAX_FILE_SIZE:
-        raise HTTPException(400, f"Файл слишком большой (макс. 10 МБ)")
+        raise HTTPException(400, "Файл слишком большой (макс. 10 МБ)")
 
     with get_db() as conn:
-        # Проверяем, что преподаватель ведёт этот предмет у этого студента
         cur = conn.execute("""
             SELECT s.id
             FROM submissions s
@@ -640,23 +656,16 @@ async def upload_feedback_file(
 
         submission_id = submission_row[0]
 
-        # Сохраняем файл
-        feedback_dir = FEEDBACK_DIR / str(clean_student_id) / str(assignment_id)
-        feedback_dir.mkdir(parents=True, exist_ok=True)
-
         safe_name = sanitize_filename(file.filename)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{safe_name}"
-        file_path = feedback_dir / filename
+        r2_key = f"feedback/{clean_student_id}/{assignment_id}/{timestamp}_{safe_name}"
 
-        with open(file_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
+        get_r2().upload_fileobj(file.file, R2_BUCKET, r2_key)
 
-        # Сохраняем в БД
         conn.execute("""
             INSERT INTO teacher_feedback_files (submission_id, file_path)
             VALUES (%s, %s)
-        """, (submission_id, str(file_path)))
+        """, (submission_id, r2_key))
 
         return {"message": "Файл комментария сохранён"}
 
@@ -677,15 +686,11 @@ async def download_feedback_file(submission_id: int, session = Depends(require_a
         if not row:
             raise HTTPException(404, "Файл не найден")
 
-        file_path, student_id = row
+        r2_key, student_id = row
         if student_id != user_id:
             raise HTTPException(403, "Нет доступа к этому файлу")
 
-        full_path = Path(file_path)
-        if not full_path.is_file():
-            raise HTTPException(404, "Файл удалён")
-
-        return FileResponse(full_path, filename=full_path.name)
+    return _r2_stream(r2_key, os.path.basename(r2_key))
 
 # ===== СКАЧИВАНИЕ ФАЙЛОВ =====
 
@@ -693,16 +698,4 @@ async def download_feedback_file(submission_id: int, session = Depends(require_a
 async def download_file(path: str, session = Depends(require_auth)):
     if ".." in path or path.startswith("/"):
         raise HTTPException(400, "Некорректный путь")
-    full_path = Path("storage") / path
-    if not full_path.is_file():
-        raise HTTPException(404, "Файл не найден")
-    try:
-        full_path = full_path.resolve().relative_to(Path("storage").resolve())
-        full_path = Path("storage") / full_path
-    except ValueError:
-        raise HTTPException(400, "Доступ запрещён")
-    return FileResponse(
-        full_path,
-        filename=full_path.name,
-        media_type='application/octet-stream'
-    )
+    return _r2_stream(path, os.path.basename(path))

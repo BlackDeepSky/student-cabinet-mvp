@@ -1,9 +1,8 @@
 """
 Личный кабинет заочного студента — MVP
-Backend на FastAPI + SQLite
+Backend на FastAPI + PostgreSQL
 """
 
-import sqlite3
 import os
 import shutil
 import re
@@ -16,17 +15,14 @@ from fastapi.staticfiles import StaticFiles
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 import bcrypt as _bcrypt
+import psycopg2
+from psycopg2.extras import DictCursor
 
 
 def verify_password(password: str, hashed: str) -> bool:
     return _bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
-# === Вспомогательные функции для времени ===
-def get_current_time():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
 # === Константы ===
-DB_PATH = Path("instance/app.db")
 UPLOAD_BASE_DIR = Path("storage/submissions")
 FEEDBACK_DIR = Path("storage/feedback")
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 МБ
@@ -34,29 +30,70 @@ VALID_ID_PATTERN = re.compile(r"^[A-Za-z0-9\-_]+$")
 SESSION_EXPIRE_HOURS = 24
 
 # Убедимся, что папки существуют
-DB_PATH.parent.mkdir(exist_ok=True)
 UPLOAD_BASE_DIR.mkdir(parents=True, exist_ok=True)
 FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
 
+# === Настройка БД ===
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+
+class DBConnection:
+    """Обёртка над psycopg2: интерфейс conn.execute(...) → cursor с fetch* и dict-доступом."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, query, params=None):
+        cur = self._conn.cursor(cursor_factory=DictCursor)
+        if params is None:
+            cur.execute(query)
+        else:
+            cur.execute(query, params)
+        return cur
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            if exc_type is None:
+                self._conn.commit()
+            else:
+                self._conn.rollback()
+        finally:
+            self._conn.close()
+        return False
+
+
+def get_db():
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL не задан в переменных окружения")
+    conn = psycopg2.connect(DATABASE_URL)
+    return DBConnection(conn)
+
 # === Безопасная инициализация БД ===
 def init_database_if_needed():
-    if not DB_PATH.exists():
-        print("🔵 БД отсутствует. Инициализирую...")
-        try:
-            from db_seed import seed_data
+    """Создаёт схему и заполняет тестовыми данными, если БД пустая."""
+    try:
+        from db_seed import init_db, seed_data
+        init_db()
+        with get_db() as conn:
+            cur = conn.execute("SELECT COUNT(*) FROM students")
+            count = cur.fetchone()[0]
+        if count == 0:
+            print("🔵 БД пуста. Заполняю тестовыми данными...")
             seed_data()
             print("✅ БД успешно создана.")
-        except Exception as e:
-            print(f"❌ Ошибка при инициализации БД: {e}")
+        else:
+            print("✅ БД уже инициализирована.")
+    except Exception as e:
+        print(f"❌ Ошибка при инициализации БД: {e}")
 
 init_database_if_needed()
 
 # === Вспомогательные функции ===
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
 def sanitize_filename(filename: str) -> str:
     safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in filename)
     return safe[:100]
@@ -69,38 +106,38 @@ def validate_id(user_id: str) -> str:
 
 def create_session(user_id: int, user_type: str) -> str:
     token = secrets.token_urlsafe(32)
-    expires_at = (datetime.now() + timedelta(hours=SESSION_EXPIRE_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
-    
+    expires_at = datetime.now() + timedelta(hours=SESSION_EXPIRE_HOURS)
+
     with get_db() as conn:
-        conn.execute("DELETE FROM sessions WHERE user_id = ? AND user_type = ?", (user_id, user_type))
+        conn.execute("DELETE FROM sessions WHERE user_id = %s AND user_type = %s", (user_id, user_type))
         conn.execute("""
             INSERT INTO sessions (token, user_id, user_type, expires_at)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
         """, (token, user_id, user_type, expires_at))
     return token
 
 def verify_session(token: str):
     if not token:
         return None
-    
-    current_time = get_current_time()
+
+    current_time = datetime.now()
     with get_db() as conn:
-        cur = conn.execute("SELECT user_id, user_type, expires_at FROM sessions WHERE token = ?", (token,))
+        cur = conn.execute("SELECT user_id, user_type, expires_at FROM sessions WHERE token = %s", (token,))
         row = cur.fetchone()
         if not row:
             return None
-        
+
         user_id, user_type, expires_at = row
         if expires_at <= current_time:
-            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            conn.execute("DELETE FROM sessions WHERE token = %s", (token,))
             return None
-        
+
         return (user_id, user_type)
 
 async def require_auth(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Требуется авторизация")
-    
+
     token = authorization.split(" ", 1)[1]
     session = verify_session(token)
     if not session:
@@ -142,7 +179,7 @@ async def login(student_id: str = Form(...), password: str = Form(...)):
         cur = conn.execute("""
             SELECT id, last_name, first_name, patronymic, password_hash
             FROM students
-            WHERE student_id = ?
+            WHERE student_id = %s
         """, (clean_id,))
         student = cur.fetchone()
         if not student or not verify_password(password, student["password_hash"]):
@@ -164,25 +201,26 @@ async def submit_work(
     user_id, user_type = session
     if user_type != "student":
         raise HTTPException(403, "Доступ запрещён")
-    
+
     if not files or all(f.filename == "" for f in files):
         raise HTTPException(400, "Не выбраны файлы")
 
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM assignments WHERE id = ?", (assignment_id,))
+        cur = conn.execute("SELECT id FROM assignments WHERE id = %s", (assignment_id,))
         if not cur.fetchone():
             raise HTTPException(404, "Задание не найдено")
 
         # Создаём запись, если её нет
         conn.execute("""
-            INSERT OR IGNORE INTO submissions (student_id, assignment_id, status)
-            VALUES (?, ?, 'submitted')
+            INSERT INTO submissions (student_id, assignment_id, status)
+            VALUES (%s, %s, 'submitted')
+            ON CONFLICT (student_id, assignment_id) DO NOTHING
         """, (user_id, assignment_id))
 
         # Получаем текущий статус
         cur = conn.execute("""
-            SELECT id, status FROM submissions 
-            WHERE student_id = ? AND assignment_id = ?
+            SELECT id, status FROM submissions
+            WHERE student_id = %s AND assignment_id = %s
         """, (user_id, assignment_id))
         submission_row = cur.fetchone()
         submission_id = submission_row[0]
@@ -196,8 +234,8 @@ async def submit_work(
         # Обновляем статус и время
         conn.execute("""
             UPDATE submissions
-            SET status = ?, submitted_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            SET status = %s, submitted_at = CURRENT_TIMESTAMP
+            WHERE id = %s
         """, (new_status, submission_id))
 
         # Сохраняем файлы
@@ -217,7 +255,7 @@ async def submit_work(
                 shutil.copyfileobj(file.file, f)
             conn.execute("""
                 INSERT INTO submission_files (submission_id, file_path)
-                VALUES (?, ?)
+                VALUES (%s, %s)
             """, (submission_id, str(file_path)))
             saved_count += 1
 
@@ -229,14 +267,14 @@ async def get_my_assignments(session = Depends(require_auth)):
     user_id, user_type = session
     if user_type != "student":
         raise HTTPException(403, "Доступ запрещён")
-    
+
     with get_db() as conn:
         cur = conn.execute("""
             SELECT a.id, a.title, a.description, a.deadline, s.id AS subject_id, s.name AS subject
             FROM assignments a
             JOIN subjects s ON a.subject_id = s.id
             JOIN student_subjects ss ON s.id = ss.subject_id
-            WHERE ss.student_id = ?
+            WHERE ss.student_id = %s
             ORDER BY a.deadline
         """, (user_id,))
         assignments_raw = cur.fetchall()
@@ -248,7 +286,7 @@ async def get_my_assignments(session = Depends(require_auth)):
         cur = conn.execute("""
             SELECT id, assignment_id, status, submitted_at, review
             FROM submissions
-            WHERE student_id = ?
+            WHERE student_id = %s
         """, (user_id,))
         submission_map = {}
         for row in cur.fetchall():
@@ -272,10 +310,10 @@ async def get_my_assignments(session = Depends(require_auth)):
         # Преподаватели по предметам
         cur = conn.execute("""
             SELECT s.id AS subject_id,
-                   GROUP_CONCAT(
-                       t.last_name || ' ' || substr(t.first_name, 1, 1) || '.' ||
-                       CASE WHEN t.patronymic IS NOT NULL 
-                           THEN substr(t.patronymic, 1, 1) || '.' 
+                   STRING_AGG(
+                       t.last_name || ' ' || substring(t.first_name, 1, 1) || '.' ||
+                       CASE WHEN t.patronymic IS NOT NULL
+                           THEN substring(t.patronymic, 1, 1) || '.'
                            ELSE '' END,
                        ', '
                    ) AS teachers
@@ -285,12 +323,12 @@ async def get_my_assignments(session = Depends(require_auth)):
             GROUP BY s.id
         """)
         teacher_map = {row["subject_id"]: row["teachers"] or "—" for row in cur.fetchall()}
-        
+
         # Проверяем наличие файлов от преподавателя
         submission_ids = [v["submission_id"] for v in submission_map.values() if v["submission_id"]]
         has_feedback = set()
         if submission_ids:
-            placeholders = ','.join('?' * len(submission_ids))
+            placeholders = ','.join(['%s'] * len(submission_ids))
             cur = conn.execute(f"""
                 SELECT submission_id FROM teacher_feedback_files
                 WHERE submission_id IN ({placeholders})
@@ -329,13 +367,13 @@ async def get_my_grades(session = Depends(require_auth)):
     user_id, user_type = session
     if user_type != "student":
         raise HTTPException(403, "Доступ запрещён")
-    
+
     with get_db() as conn:
         cur = conn.execute("""
             SELECT s.name AS subject, g.grade, g.status, g.graded_at
             FROM grades g
             JOIN subjects s ON g.subject_id = s.id
-            WHERE g.student_id = ?
+            WHERE g.student_id = %s
             ORDER BY g.graded_at DESC
         """, (user_id,))
 
@@ -344,11 +382,14 @@ async def get_my_grades(session = Depends(require_auth)):
             graded_at = row["graded_at"]
             formatted_date = "—"
             if graded_at:
-                try:
-                    dt = datetime.fromisoformat(graded_at)
-                    formatted_date = dt.strftime("%d.%m.%Y, %H:%M")
-                except ValueError:
-                    pass
+                if isinstance(graded_at, datetime):
+                    formatted_date = graded_at.strftime("%d.%m.%Y, %H:%M")
+                else:
+                    try:
+                        dt = datetime.fromisoformat(str(graded_at))
+                        formatted_date = dt.strftime("%d.%m.%Y, %H:%M")
+                    except ValueError:
+                        pass
             grades.append({
                 "subject": row["subject"],
                 "grade": row["grade"],
@@ -367,7 +408,7 @@ async def teacher_login(teacher_id: str = Form(...), password: str = Form(...)):
         cur = conn.execute("""
             SELECT id, last_name, first_name, patronymic, password_hash
             FROM teachers
-            WHERE teacher_id = ?
+            WHERE teacher_id = %s
         """, (clean_id,))
         teacher = cur.fetchone()
         if not teacher or not verify_password(password, teacher["password_hash"]):
@@ -405,11 +446,11 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
             JOIN submissions sub ON sub.assignment_id = a.id
             JOIN students st ON sub.student_id = st.id
             LEFT JOIN grades g ON g.student_id = st.id AND g.subject_id = s.id
-            WHERE st_link.teacher_id = ?
+            WHERE st_link.teacher_id = %s
             AND (sub.status IS NULL OR sub.status NOT IN ('approved'))
             ORDER BY a.deadline DESC, st.last_name
         """, (user_id,))
-        
+
         # Маппинг статусов
         STATUS_LABELS = {
             "submitted": "Отправлено",
@@ -418,7 +459,7 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
             "rejected": "Не зачтено",
             "resubmitted": "Не зачтено (повторно отправлена)"
         }
-        
+
         result = []
         for row in cur.fetchall():
             result.append({
@@ -455,7 +496,7 @@ async def get_my_teacher_history(session = Depends(require_auth)):
             JOIN assignments a ON a.subject_id = s.id
             JOIN students st ON g.student_id = st.id
             JOIN subject_teachers st_link ON s.id = st_link.subject_id
-            WHERE st_link.teacher_id = ?
+            WHERE st_link.teacher_id = %s
               AND g.status IN ('зачёт', 'сдано')
             ORDER BY g.graded_at DESC
         """, (user_id,))
@@ -463,14 +504,14 @@ async def get_my_teacher_history(session = Depends(require_auth)):
 
 @app.get("/api/teacher/files/{assignment_id}/{student_id}")
 async def get_submission_files(
-    assignment_id: int, 
+    assignment_id: int,
     student_id: str,
     session = Depends(require_auth)
 ):
     user_id, user_type = session
     if user_type != "teacher":
         raise HTTPException(403, "Доступ запрещён")
-    
+
     clean_id = validate_id(student_id)
     with get_db() as conn:
         cur = conn.execute("""
@@ -478,7 +519,7 @@ async def get_submission_files(
             FROM submission_files sf
             JOIN submissions s ON sf.submission_id = s.id
             JOIN students st ON s.student_id = st.id
-            WHERE s.assignment_id = ? AND st.student_id = ?
+            WHERE s.assignment_id = %s AND st.student_id = %s
         """, (assignment_id, clean_id))
         return [
             {
@@ -500,16 +541,16 @@ async def set_grade(
     user_id, user_type = session
     if user_type != "teacher":
         raise HTTPException(403, "Доступ запрещён")
-    
+
     clean_student_id = validate_id(student_id)
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE student_id = ?", (clean_student_id,))
+        cur = conn.execute("SELECT id FROM students WHERE student_id = %s", (clean_student_id,))
         student_row = cur.fetchone()
         if not student_row:
             raise HTTPException(404, "Студент не найден")
         student_id_int = student_row[0]
 
-        cur = conn.execute("SELECT id FROM subjects WHERE name = ?", (subject_name,))
+        cur = conn.execute("SELECT id FROM subjects WHERE name = %s", (subject_name,))
         subject_row = cur.fetchone()
         if not subject_row:
             raise HTTPException(404, "Предмет не найден")
@@ -518,19 +559,19 @@ async def set_grade(
         if status_input == "не зачтено":
             cur = conn.execute("""
                 SELECT s.id FROM submissions s
-                WHERE s.student_id = ? AND s.assignment_id = ?
+                WHERE s.student_id = %s AND s.assignment_id = %s
             """, (student_id_int, assignment_id))
             submission_row = cur.fetchone()
             if submission_row:
                 submission_id = submission_row[0]
-                cur = conn.execute("SELECT file_path FROM submission_files WHERE submission_id = ?", (submission_id,))
+                cur = conn.execute("SELECT file_path FROM submission_files WHERE submission_id = %s", (submission_id,))
                 file_paths = [row[0] for row in cur.fetchall()]
                 for fp in file_paths:
                     try:
                         os.remove(fp)
                     except (FileNotFoundError, OSError):
                         pass
-                conn.execute("DELETE FROM submission_files WHERE submission_id = ?", (submission_id,))
+                conn.execute("DELETE FROM submission_files WHERE submission_id = %s", (submission_id,))
 
         status_mapping = {
             "зачёт": "approved",
@@ -544,20 +585,20 @@ async def set_grade(
 
         conn.execute("""
             UPDATE submissions
-            SET status = ?, review = ?
-            WHERE student_id = ? AND assignment_id = ?
+            SET status = %s, review = %s
+            WHERE student_id = %s AND assignment_id = %s
         """, (db_status, review, student_id_int, assignment_id))
 
         grade_value = 100 if status_input in ("зачёт", "сдано") else None
         conn.execute("""
             INSERT INTO grades (student_id, subject_id, grade, status, review, graded_at)
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(student_id, subject_id)
-            DO UPDATE SET 
-                grade = excluded.grade,
-                status = excluded.status,
-                review = excluded.review,
-                graded_at = excluded.graded_at
+            VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (student_id, subject_id)
+            DO UPDATE SET
+                grade = EXCLUDED.grade,
+                status = EXCLUDED.status,
+                review = EXCLUDED.review,
+                graded_at = EXCLUDED.graded_at
         """, (student_id_int, subject_id_int, grade_value, status_input, review))
 
         return {"message": "Статус и рецензия сохранены"}
@@ -574,11 +615,11 @@ async def upload_feedback_file(
     user_id, user_type = session
     if user_type != "teacher":
         raise HTTPException(403, "Доступ запрещён")
-    
+
     clean_student_id = validate_id(student_id)
     if not file.filename:
         raise HTTPException(400, "Файл не выбран")
-    
+
     if file.size > MAX_FILE_SIZE:
         raise HTTPException(400, f"Файл слишком большой (макс. 10 МБ)")
 
@@ -591,12 +632,12 @@ async def upload_feedback_file(
             JOIN subjects subj ON a.subject_id = subj.id
             JOIN subject_teachers st ON subj.id = st.subject_id
             JOIN students stud ON s.student_id = stud.id
-            WHERE s.assignment_id = ? AND stud.student_id = ? AND st.teacher_id = ?
+            WHERE s.assignment_id = %s AND stud.student_id = %s AND st.teacher_id = %s
         """, (assignment_id, clean_student_id, user_id))
         submission_row = cur.fetchone()
         if not submission_row:
             raise HTTPException(403, "Нет доступа к этой работе")
-        
+
         submission_id = submission_row[0]
 
         # Сохраняем файл
@@ -614,7 +655,7 @@ async def upload_feedback_file(
         # Сохраняем в БД
         conn.execute("""
             INSERT INTO teacher_feedback_files (submission_id, file_path)
-            VALUES (?, ?)
+            VALUES (%s, %s)
         """, (submission_id, str(file_path)))
 
         return {"message": "Файл комментария сохранён"}
@@ -624,26 +665,26 @@ async def download_feedback_file(submission_id: int, session = Depends(require_a
     user_id, user_type = session
     if user_type != "student":
         raise HTTPException(403, "Доступ запрещён")
-    
+
     with get_db() as conn:
         cur = conn.execute("""
             SELECT tf.file_path, s.student_id
             FROM teacher_feedback_files tf
             JOIN submissions s ON tf.submission_id = s.id
-            WHERE tf.submission_id = ?
+            WHERE tf.submission_id = %s
         """, (submission_id,))
         row = cur.fetchone()
         if not row:
             raise HTTPException(404, "Файл не найден")
-        
+
         file_path, student_id = row
         if student_id != user_id:
             raise HTTPException(403, "Нет доступа к этому файлу")
-        
+
         full_path = Path(file_path)
         if not full_path.is_file():
             raise HTTPException(404, "Файл удалён")
-        
+
         return FileResponse(full_path, filename=full_path.name)
 
 # ===== СКАЧИВАНИЕ ФАЙЛОВ =====

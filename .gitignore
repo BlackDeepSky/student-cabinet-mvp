@@ -46,3 +46,7 @@ Thumbs.db
 # ОС
 *.log
 .bruin.yml
+
+# Claude
+CLAUDE.md
+tasks.md

@@ -6,11 +6,14 @@ Backend на FastAPI + PostgreSQL + Cloudflare R2
 import os
 import re
 import secrets
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 load_dotenv()
 from datetime import timedelta, datetime
 from pathlib import Path
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Header
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Header, BackgroundTasks
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
@@ -31,6 +34,30 @@ def hash_password(password: str) -> str:
 
 # === Константы ===
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 МБ
+
+# === Настройка SMTP ===
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM") or SMTP_USER
+
+def send_email(to: str, subject: str, body: str):
+    if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD, to]):
+        return
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
+    msg["To"] = to
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.login(SMTP_USER, SMTP_PASSWORD)
+            smtp.sendmail(SMTP_FROM, to, msg.as_string())
+    except Exception as e:
+        print(f"[email] Ошибка отправки на {to}: {e}")
 VALID_ID_PATTERN = re.compile(r"^[A-Za-z0-9\-_]+$")
 SESSION_EXPIRE_HOURS = 24
 
@@ -258,6 +285,7 @@ async def login(student_id: str = Form(...), password: str = Form(...)):
 @app.post("/api/submit/{assignment_id}")
 async def submit_work(
     assignment_id: int,
+    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     session = Depends(require_auth)
 ):
@@ -269,9 +297,16 @@ async def submit_work(
         raise HTTPException(400, "Не выбраны файлы")
 
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM assignments WHERE id = %s", (assignment_id,))
-        if not cur.fetchone():
+        cur = conn.execute("""
+            SELECT a.id, a.title, s.name AS subject
+            FROM assignments a JOIN subjects s ON a.subject_id = s.id
+            WHERE a.id = %s
+        """, (assignment_id,))
+        assignment_row = cur.fetchone()
+        if not assignment_row:
             raise HTTPException(404, "Задание не найдено")
+        assignment_title = assignment_row["title"]
+        subject_name = assignment_row["subject"]
 
         conn.execute("""
             INSERT INTO submissions (student_id, assignment_id, status)
@@ -295,6 +330,21 @@ async def submit_work(
             WHERE id = %s
         """, (new_status, submission_id))
 
+        cur = conn.execute("""
+            SELECT st.last_name, st.first_name
+            FROM students st WHERE st.id = %s
+        """, (user_id,))
+        student_row = cur.fetchone()
+        student_name = f"{student_row['last_name']} {student_row['first_name']}" if student_row else "Студент"
+
+        cur = conn.execute("""
+            SELECT t.email FROM teachers t
+            JOIN subject_teachers st_link ON t.id = st_link.teacher_id
+            JOIN assignments a ON a.subject_id = st_link.subject_id
+            WHERE a.id = %s AND t.email IS NOT NULL
+        """, (assignment_id,))
+        teacher_emails = [row[0] for row in cur.fetchall()]
+
         r2 = get_r2()
         saved_count = 0
         for file in files:
@@ -312,7 +362,16 @@ async def submit_work(
             """, (submission_id, r2_key))
             saved_count += 1
 
-        return {"message": f"Отправлено {saved_count} файлов"}
+    action = "повторно отправил" if new_status == "resubmitted" else "отправил"
+    email_subject = f"Новая работа на проверку — {assignment_title}"
+    email_body = (
+        f"Студент {student_name} {action} работу «{assignment_title}» по предмету «{subject_name}».\n\n"
+        f"Войдите в кабинет преподавателя для проверки."
+    )
+    for email in teacher_emails:
+        background_tasks.add_task(send_email, email, email_subject, email_body)
+
+    return {"message": f"Отправлено {saved_count} файлов"}
 
 # Эндпоинты для студентов (/me)
 @app.get("/api/assignments/me")
@@ -597,6 +656,7 @@ async def get_submission_files(
 
 @app.post("/api/teacher/grade")
 async def set_grade(
+    background_tasks: BackgroundTasks,
     student_id: str = Form(...),
     subject_name: str = Form(...),
     assignment_id: int = Form(...),
@@ -610,17 +670,25 @@ async def set_grade(
 
     clean_student_id = validate_id(student_id)
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE student_id = %s", (clean_student_id,))
+        cur = conn.execute("""
+            SELECT id, last_name, first_name, email FROM students WHERE student_id = %s
+        """, (clean_student_id,))
         student_row = cur.fetchone()
         if not student_row:
             raise HTTPException(404, "Студент не найден")
-        student_id_int = student_row[0]
+        student_id_int = student_row["id"]
+        student_name = f"{student_row['last_name']} {student_row['first_name']}"
+        student_email = student_row["email"]
 
         cur = conn.execute("SELECT id FROM subjects WHERE name = %s", (subject_name,))
         subject_row = cur.fetchone()
         if not subject_row:
             raise HTTPException(404, "Предмет не найден")
         subject_id_int = subject_row[0]
+
+        cur = conn.execute("SELECT title FROM assignments WHERE id = %s", (assignment_id,))
+        assignment_row = cur.fetchone()
+        assignment_title = assignment_row["title"] if assignment_row else "Задание"
 
         if status_input == "не зачтено":
             cur = conn.execute("""
@@ -673,7 +741,32 @@ async def set_grade(
                 graded_at = EXCLUDED.graded_at
         """, (student_id_int, subject_id_int, grade_value, status_input, review))
 
-        return {"message": "Статус и рецензия сохранены"}
+    if student_email:
+        STATUS_LABELS = {
+            "зачёт": "Зачтено",
+            "сдано": "Зачтено",
+            "не зачтено": "Не зачтено — требуется повторная сдача",
+            "не допущен": "Не допущен",
+            "не сдано": "Не зачтено",
+            "принят на рассмотрение": "Принято на рассмотрение",
+        }
+        status_label = STATUS_LABELS.get(status_input, status_input)
+        review_line = f"Рецензия: {review}" if review else ""
+        email_body = (
+            f"Здравствуйте, {student_name}!\n\n"
+            f"Преподаватель проверил вашу работу «{assignment_title}» по предмету «{subject_name}».\n\n"
+            f"Статус: {status_label}\n"
+            f"{review_line}\n\n"
+            f"Войдите в личный кабинет для подробностей."
+        ).strip()
+        background_tasks.add_task(
+            send_email,
+            student_email,
+            f"Статус работы изменён — {assignment_title}",
+            email_body,
+        )
+
+    return {"message": "Статус и рецензия сохранены"}
 
 # ===== ФАЙЛЫ ОБРАТНОЙ СВЯЗИ ОТ ПРЕПОДАВАТЕЛЯ =====
 
@@ -996,6 +1089,60 @@ async def admin_delete_assignment(assignment_id: int, admin_id = Depends(require
             raise HTTPException(404, "Задание не найдено")
         conn.execute("DELETE FROM assignments WHERE id = %s", (assignment_id,))
     return {"ok": True}
+
+
+# ===== ПРОГРЕСС СТУДЕНТОВ =====
+
+@app.get("/api/teacher/progress")
+async def get_teacher_progress(subject_id: Optional[int] = None, session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "teacher":
+        raise HTTPException(403, "Доступ запрещён")
+
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT DISTINCT subj.id, subj.name
+            FROM subjects subj
+            JOIN subject_teachers st_link ON subj.id = st_link.subject_id
+            WHERE st_link.teacher_id = %s
+            ORDER BY subj.name
+        """, (user_id,))
+        subjects = [dict(r) for r in cur.fetchall()]
+
+        query = """
+            SELECT
+                st.last_name || ' ' || st.first_name AS student_name,
+                st.student_id,
+                subj.id AS subject_id,
+                subj.name AS subject,
+                a.id AS assignment_id,
+                a.title AS assignment_title,
+                a.deadline,
+                sub.status,
+                sub.submitted_at
+            FROM assignments a
+            JOIN subjects subj ON a.subject_id = subj.id
+            JOIN subject_teachers st_link ON subj.id = st_link.subject_id
+            JOIN student_subjects ss ON subj.id = ss.subject_id
+            JOIN students st ON ss.student_id = st.id
+            LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.student_id = st.id
+            WHERE st_link.teacher_id = %s
+        """
+        params = [user_id]
+        if subject_id:
+            query += " AND subj.id = %s"
+            params.append(subject_id)
+        query += " ORDER BY subj.name, st.last_name, a.deadline"
+
+        cur = conn.execute(query, params)
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d["deadline"] = d["deadline"].isoformat() if d["deadline"] else None
+            d["submitted_at"] = d["submitted_at"].isoformat() if d["submitted_at"] else None
+            rows.append(d)
+
+        return {"subjects": subjects, "rows": rows}
 
 
 # ===== СКАЧИВАНИЕ ФАЙЛОВ =====

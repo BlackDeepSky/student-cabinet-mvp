@@ -68,10 +68,13 @@
         </div>
       </div>
 
-      <!-- Кнопка истории -->
+      <!-- Кнопки истории и прогресса -->
       <div class="d-flex justify-content-between mb-3">
         <h3>Работы студентов</h3>
-        <button id="show-history-btn" class="btn btn-outline-info">📜 История зачтённых</button>
+        <div class="d-flex gap-2">
+          <button id="show-progress-btn" class="btn btn-outline-primary">📊 Прогресс студентов</button>
+          <button id="show-history-btn" class="btn btn-outline-info">📜 История зачтённых</button>
+        </div>
       </div>
 
       <div class="table-responsive">
@@ -140,6 +143,41 @@
         </div>
         <div class="modal-body" id="files-list">
           <!-- Сюда подгружаются файлы -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно: прогресс студентов -->
+  <div class="modal fade" id="progressModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Прогресс студентов</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <select id="progress-subject-filter" class="form-select w-auto">
+              <option value="">Все предметы</option>
+            </select>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-bordered table-sm">
+              <thead>
+                <tr>
+                  <th>Студент</th>
+                  <th>Предмет</th>
+                  <th>Задание</th>
+                  <th>Дедлайн</th>
+                  <th>Статус</th>
+                  <th>Дата сдачи</th>
+                </tr>
+              </thead>
+              <tbody id="progress-rows"></tbody>
+            </table>
+          </div>
+          <p class="text-muted text-center" id="progress-empty" style="display:none;">Нет данных</p>
         </div>
       </div>
     </div>
@@ -548,6 +586,103 @@
         alert('Ошибка загрузки истории: ' + err.message);
       }
     }
+
+    // Прогресс студентов
+    let progressData = [];
+
+    async function loadProgress(subjectId) {
+      const url = subjectId ? `/api/teacher/progress?subject_id=${subjectId}` : '/api/teacher/progress';
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('teacher_token');
+          localStorage.removeItem('teacher_name');
+          showLogin();
+          return;
+        }
+        alert('Ошибка загрузки прогресса');
+        return;
+      }
+      const data = await res.json();
+
+      // Заполняем фильтр при первой загрузке
+      const filter = document.getElementById('progress-subject-filter');
+      if (filter.options.length === 1) {
+        data.subjects.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.name;
+          filter.appendChild(opt);
+        });
+      }
+
+      renderProgress(data.rows);
+    }
+
+    function renderProgress(rows) {
+      const tbody = document.getElementById('progress-rows');
+      const emptyMsg = document.getElementById('progress-empty');
+      tbody.innerHTML = '';
+
+      if (rows.length === 0) {
+        emptyMsg.style.display = 'block';
+        return;
+      }
+      emptyMsg.style.display = 'none';
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const STATUS_LABELS = {
+        submitted: 'Отправлено',
+        in_review: 'На рассмотрении',
+        approved: 'Зачтено',
+        rejected: 'Не зачтено',
+        resubmitted: 'Повторно отправлено'
+      };
+
+      rows.forEach(row => {
+        const isApproved = row.status === 'approved';
+        const isNotSubmitted = !row.status;
+        const isRejected = row.status === 'rejected';
+        const deadline = row.deadline ? new Date(row.deadline) : null;
+        const isOverdue = deadline && deadline < today && !isApproved;
+
+        let rowClass = '';
+        if (isApproved) rowClass = 'table-success';
+        else if (isOverdue && isNotSubmitted) rowClass = 'table-danger';
+        else if (isNotSubmitted || isRejected) rowClass = 'table-warning';
+
+        const deadlineStr = deadline
+          ? deadline.toLocaleDateString('ru-RU') + (isOverdue ? ' ⚠️' : '')
+          : '—';
+        const statusLabel = row.status ? STATUS_LABELS[row.status] || row.status : 'Не сдано';
+        const submittedAt = row.submitted_at
+          ? new Date(row.submitted_at).toLocaleDateString('ru-RU')
+          : '—';
+
+        const tr = document.createElement('tr');
+        if (rowClass) tr.className = rowClass;
+        tr.innerHTML = `
+          <td>${row.student_name}<br><small class="text-muted">${row.student_id}</small></td>
+          <td>${row.subject}</td>
+          <td>${row.assignment_title}</td>
+          <td>${deadlineStr}</td>
+          <td>${statusLabel}</td>
+          <td>${submittedAt}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('show-progress-btn').addEventListener('click', () => {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('progressModal')).show();
+      loadProgress('');
+    });
+
+    document.getElementById('progress-subject-filter').addEventListener('change', (e) => {
+      loadProgress(e.target.value);
+    });
 
     // Кнопка "История"
     document.getElementById('show-history-btn').addEventListener('click', loadHistory);

@@ -179,6 +179,17 @@
         </div>
 
         <script>
+            function deadlineBadge(deadlineStr) {
+                if (!deadlineStr) return '<span class="badge bg-secondary">Без дедлайна</span>';
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                const due = new Date(deadlineStr);
+                const days = Math.round((due - now) / 86400000);
+                if (days < 0) return `<span class="badge bg-danger">Просрочено (${due.toLocaleDateString('ru-RU')})</span>`;
+                if (days <= 7) return `<span class="badge bg-warning text-dark">Дедлайн: ${due.toLocaleDateString('ru-RU')} (${days} дн.)</span>`;
+                return `<span class="badge bg-success">Дедлайн: ${due.toLocaleDateString('ru-RU')}</span>`;
+            }
+
             // Вспомогательная функция для заголовков авторизации
             function getAuthHeaders() {
                 const token = localStorage.getItem("student_token");
@@ -280,9 +291,7 @@
                     cont.innerHTML = "";
 
                     for (const a of assignments) {
-                        const deadline = new Date(
-                            a.deadline,
-                        ).toLocaleDateString("ru-RU");
+                        const deadline = deadlineBadge(a.deadline);
                         const submittedAt = a.submitted_at
                             ? new Date(a.submitted_at).toLocaleDateString(
                                   "ru-RU",
@@ -354,7 +363,7 @@
               <p class="text-muted mb-2">Преподаватель: ${a.teachers}</p>
               <h5>${a.title} ${statusBadge}</h5>
               <p>${a.description}</p>
-              <p><small>Дедлайн: ${deadline}</small></p>
+              <p class="mb-2">${deadline}</p>
               ${reviewBlock}
               ${feedbackBlock}
               ${actionBlock}

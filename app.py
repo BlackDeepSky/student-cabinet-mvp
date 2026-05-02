@@ -722,6 +722,258 @@ async def download_feedback_file(submission_id: int, session = Depends(require_a
 
     return _r2_stream(r2_key, os.path.basename(r2_key))
 
+# ===== АДМИНИСТРАТОР =====
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page():
+    with open("static/admin.html", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+async def require_admin(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Требуется авторизация")
+    token = authorization.split(" ", 1)[1]
+    session = verify_session(token)
+    if not session:
+        raise HTTPException(401, "Неверный или просроченный токен")
+    user_id, user_type = session
+    if user_type != "admin":
+        raise HTTPException(403, "Доступ запрещён")
+    return user_id
+
+@app.post("/api/admin/login")
+async def admin_login(admin_id: str = Form(...), password: str = Form(...)):
+    clean_id = validate_id(admin_id)
+    with get_db() as conn:
+        cur = conn.execute("SELECT id, password_hash FROM admins WHERE admin_id = %s", (clean_id,))
+        admin = cur.fetchone()
+        if not admin or not verify_password(password, admin["password_hash"]):
+            raise HTTPException(401, "Неверный логин или пароль")
+        token = create_session(admin["id"], "admin")
+        return {"token": token}
+
+# --- Студенты ---
+
+@app.get("/api/admin/students")
+async def admin_list_students(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT id, student_id, last_name, first_name, patronymic, group_name, email
+            FROM students ORDER BY last_name, first_name
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+@app.post("/api/admin/students")
+async def admin_add_student(
+    student_id: str = Form(...),
+    last_name: str = Form(...),
+    first_name: str = Form(...),
+    patronymic: str = Form(None),
+    group_name: str = Form(None),
+    email: str = Form(None),
+    admin_id = Depends(require_admin)
+):
+    clean_id = validate_id(student_id)
+    temp_password = secrets.token_hex(4)
+    with get_db() as conn:
+        try:
+            conn.execute("""
+                INSERT INTO students (student_id, last_name, first_name, patronymic, group_name, email, password_hash)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (clean_id, last_name, first_name, patronymic or None, group_name or None,
+                  email or None, hash_password(temp_password)))
+        except Exception:
+            raise HTTPException(400, "Студент с таким ID уже существует")
+    return {"ok": True, "temp_password": temp_password}
+
+@app.delete("/api/admin/students/{student_db_id}")
+async def admin_delete_student(student_db_id: int, admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("SELECT id FROM students WHERE id = %s", (student_db_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, "Студент не найден")
+        conn.execute("DELETE FROM students WHERE id = %s", (student_db_id,))
+    return {"ok": True}
+
+# --- Преподаватели ---
+
+@app.get("/api/admin/teachers")
+async def admin_list_teachers(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT id, teacher_id, last_name, first_name, patronymic, email
+            FROM teachers ORDER BY last_name, first_name
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+@app.post("/api/admin/teachers")
+async def admin_add_teacher(
+    teacher_id: str = Form(...),
+    last_name: str = Form(...),
+    first_name: str = Form(...),
+    patronymic: str = Form(None),
+    email: str = Form(None),
+    admin_id = Depends(require_admin)
+):
+    clean_id = validate_id(teacher_id)
+    temp_password = secrets.token_hex(4)
+    with get_db() as conn:
+        try:
+            conn.execute("""
+                INSERT INTO teachers (teacher_id, last_name, first_name, patronymic, email, password_hash)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (clean_id, last_name, first_name, patronymic or None,
+                  email or None, hash_password(temp_password)))
+        except Exception:
+            raise HTTPException(400, "Преподаватель с таким ID уже существует")
+    return {"ok": True, "temp_password": temp_password}
+
+@app.delete("/api/admin/teachers/{teacher_db_id}")
+async def admin_delete_teacher(teacher_db_id: int, admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("SELECT id FROM teachers WHERE id = %s", (teacher_db_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, "Преподаватель не найден")
+        conn.execute("DELETE FROM teachers WHERE id = %s", (teacher_db_id,))
+    return {"ok": True}
+
+# --- Предметы ---
+
+@app.get("/api/admin/subjects")
+async def admin_list_subjects(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT s.id, s.name, s.code, s.semester,
+                   COALESCE(STRING_AGG(t.last_name || ' ' || t.first_name, ', '), '') AS teachers
+            FROM subjects s
+            LEFT JOIN subject_teachers st ON st.subject_id = s.id
+            LEFT JOIN teachers t ON t.id = st.teacher_id
+            GROUP BY s.id ORDER BY s.name
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+@app.post("/api/admin/subjects")
+async def admin_add_subject(
+    name: str = Form(...),
+    code: str = Form(None),
+    semester: str = Form(None),
+    admin_id = Depends(require_admin)
+):
+    with get_db() as conn:
+        try:
+            cur = conn.execute("""
+                INSERT INTO subjects (name, code, semester) VALUES (%s, %s, %s) RETURNING id
+            """, (name, code or None, semester or None))
+            return {"ok": True, "id": cur.fetchone()[0]}
+        except Exception:
+            raise HTTPException(400, "Предмет с таким названием уже существует")
+
+@app.delete("/api/admin/subjects/{subject_id}")
+async def admin_delete_subject(subject_id: int, admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("SELECT id FROM subjects WHERE id = %s", (subject_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, "Предмет не найден")
+        conn.execute("DELETE FROM subjects WHERE id = %s", (subject_id,))
+    return {"ok": True}
+
+@app.post("/api/admin/subjects/{subject_id}/teachers")
+async def admin_assign_teacher(
+    subject_id: int,
+    teacher_id: int = Form(...),
+    admin_id = Depends(require_admin)
+):
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO subject_teachers (subject_id, teacher_id) VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+        """, (subject_id, teacher_id))
+    return {"ok": True}
+
+@app.delete("/api/admin/subjects/{subject_id}/teachers/{teacher_id}")
+async def admin_remove_teacher(subject_id: int, teacher_id: int, admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        conn.execute("DELETE FROM subject_teachers WHERE subject_id = %s AND teacher_id = %s",
+                     (subject_id, teacher_id))
+    return {"ok": True}
+
+@app.post("/api/admin/subjects/{subject_id}/students")
+async def admin_enroll_student(
+    subject_id: int,
+    student_id: int = Form(...),
+    admin_id = Depends(require_admin)
+):
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO student_subjects (student_id, subject_id) VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+        """, (student_id, subject_id))
+    return {"ok": True}
+
+@app.delete("/api/admin/subjects/{subject_id}/students/{student_id}")
+async def admin_unenroll_student(subject_id: int, student_id: int, admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        conn.execute("DELETE FROM student_subjects WHERE student_id = %s AND subject_id = %s",
+                     (student_id, subject_id))
+    return {"ok": True}
+
+@app.get("/api/admin/subjects/{subject_id}/members")
+async def admin_subject_members(subject_id: int, admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        t_cur = conn.execute("""
+            SELECT t.id, t.teacher_id, t.last_name || ' ' || t.first_name AS name
+            FROM subject_teachers st JOIN teachers t ON t.id = st.teacher_id
+            WHERE st.subject_id = %s
+        """, (subject_id,))
+        s_cur = conn.execute("""
+            SELECT s.id, s.student_id, s.last_name || ' ' || s.first_name AS name
+            FROM student_subjects ss JOIN students s ON s.id = ss.student_id
+            WHERE ss.subject_id = %s
+        """, (subject_id,))
+        return {"teachers": [dict(r) for r in t_cur.fetchall()],
+                "students": [dict(r) for r in s_cur.fetchall()]}
+
+# --- Задания ---
+
+@app.get("/api/admin/assignments")
+async def admin_list_assignments(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT a.id, a.title, a.description, a.deadline, s.name AS subject
+            FROM assignments a JOIN subjects s ON s.id = a.subject_id
+            ORDER BY a.deadline DESC NULLS LAST
+        """)
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d["deadline"] = d["deadline"].strftime("%Y-%m-%d") if d["deadline"] else None
+            rows.append(d)
+        return rows
+
+@app.post("/api/admin/assignments")
+async def admin_add_assignment(
+    subject_id: int = Form(...),
+    title: str = Form(...),
+    description: str = Form(None),
+    deadline: str = Form(None),
+    admin_id = Depends(require_admin)
+):
+    with get_db() as conn:
+        cur = conn.execute("""
+            INSERT INTO assignments (subject_id, title, description, deadline) VALUES (%s, %s, %s, %s) RETURNING id
+        """, (subject_id, title, description or None, deadline or None))
+        return {"ok": True, "id": cur.fetchone()[0]}
+
+@app.delete("/api/admin/assignments/{assignment_id}")
+async def admin_delete_assignment(assignment_id: int, admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("SELECT id FROM assignments WHERE id = %s", (assignment_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, "Задание не найдено")
+        conn.execute("DELETE FROM assignments WHERE id = %s", (assignment_id,))
+    return {"ok": True}
+
+
 # ===== СКАЧИВАНИЕ ФАЙЛОВ =====
 
 @app.get("/download/{path:path}")

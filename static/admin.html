@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Панель администратора</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body class="bg-light">
+<div class="container py-4">
+  <h1 class="mb-4">Панель администратора</h1>
+
+  <!-- Форма входа -->
+  <div id="login-section" class="card p-4 mb-4" style="max-width:400px">
+    <h4 class="mb-3">Вход</h4>
+    <div id="login-error" class="alert alert-danger d-none"></div>
+    <form id="login-form">
+      <div class="mb-3">
+        <input type="text" id="admin-id" class="form-control" placeholder="Логин администратора" required>
+      </div>
+      <div class="mb-3">
+        <input type="password" id="admin-password" class="form-control" placeholder="Пароль" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Войти</button>
+    </form>
+  </div>
+
+  <!-- Основной интерфейс -->
+  <div id="main-section" style="display:none">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="mb-0">Управление данными</h4>
+      <button id="logout-btn" class="btn btn-outline-secondary btn-sm">Выйти</button>
+    </div>
+
+    <!-- Вкладки -->
+    <ul class="nav nav-tabs mb-4" id="adminTabs">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-students">Студенты</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-teachers">Преподаватели</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-subjects">Предметы</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-assignments">Задания</button></li>
+    </ul>
+
+    <div class="tab-content">
+
+      <!-- ===== СТУДЕНТЫ ===== -->
+      <div class="tab-pane fade show active" id="tab-students">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Студенты</h5>
+          <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+            <i class="bi bi-plus-lg"></i> Добавить студента
+          </button>
+        </div>
+        <div id="temp-password-alert" class="alert alert-success d-none">
+          Временный пароль: <strong id="temp-password-value"></strong> — сохраните его, он больше не будет показан.
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover">
+            <thead class="table-light">
+              <tr><th>ID</th><th>ФИО</th><th>Группа</th><th>Email</th><th></th></tr>
+            </thead>
+            <tbody id="students-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== ПРЕПОДАВАТЕЛИ ===== -->
+      <div class="tab-pane fade" id="tab-teachers">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Преподаватели</h5>
+          <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addTeacherModal">
+            <i class="bi bi-plus-lg"></i> Добавить преподавателя
+          </button>
+        </div>
+        <div id="temp-teacher-password-alert" class="alert alert-success d-none">
+          Временный пароль: <strong id="temp-teacher-password-value"></strong> — сохраните его, он больше не будет показан.
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover">
+            <thead class="table-light">
+              <tr><th>ID</th><th>ФИО</th><th>Email</th><th></th></tr>
+            </thead>
+            <tbody id="teachers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== ПРЕДМЕТЫ ===== -->
+      <div class="tab-pane fade" id="tab-subjects">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Предметы</h5>
+          <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addSubjectModal">
+            <i class="bi bi-plus-lg"></i> Добавить предмет
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover">
+            <thead class="table-light">
+              <tr><th>Название</th><th>Код</th><th>Семестр</th><th>Преподаватели</th><th></th></tr>
+            </thead>
+            <tbody id="subjects-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== ЗАДАНИЯ ===== -->
+      <div class="tab-pane fade" id="tab-assignments">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Задания</h5>
+          <button class="btn btn-success btn-sm" id="open-add-assignment-btn">
+            <i class="bi bi-plus-lg"></i> Добавить задание
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover">
+            <thead class="table-light">
+              <tr><th>Предмет</th><th>Название</th><th>Дедлайн</th><th></th></tr>
+            </thead>
+            <tbody id="assignments-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /tab-content -->
+  </div><!-- /main-section -->
+</div>
+
+<!-- ===== МОДАЛКИ ===== -->
+
+<!-- Добавить студента -->
+<div class="modal fade" id="addStudentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Добавить студента</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div id="add-student-error" class="alert alert-danger d-none"></div>
+        <form id="add-student-form">
+          <div class="mb-2"><input type="text" name="student_id" class="form-control" placeholder="ID студента (напр. 2024-IS-001)" required></div>
+          <div class="mb-2"><input type="text" name="last_name" class="form-control" placeholder="Фамилия" required></div>
+          <div class="mb-2"><input type="text" name="first_name" class="form-control" placeholder="Имя" required></div>
+          <div class="mb-2"><input type="text" name="patronymic" class="form-control" placeholder="Отчество (необязательно)"></div>
+          <div class="mb-2"><input type="text" name="group_name" class="form-control" placeholder="Группа (необязательно)"></div>
+          <div class="mb-2"><input type="email" name="email" class="form-control" placeholder="Email (необязательно)"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-success" id="add-student-btn">Добавить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Добавить преподавателя -->
+<div class="modal fade" id="addTeacherModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Добавить преподавателя</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div id="add-teacher-error" class="alert alert-danger d-none"></div>
+        <form id="add-teacher-form">
+          <div class="mb-2"><input type="text" name="teacher_id" class="form-control" placeholder="ID преподавателя (напр. T-CS-03)" required></div>
+          <div class="mb-2"><input type="text" name="last_name" class="form-control" placeholder="Фамилия" required></div>
+          <div class="mb-2"><input type="text" name="first_name" class="form-control" placeholder="Имя" required></div>
+          <div class="mb-2"><input type="text" name="patronymic" class="form-control" placeholder="Отчество (необязательно)"></div>
+          <div class="mb-2"><input type="email" name="email" class="form-control" placeholder="Email (необязательно)"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-success" id="add-teacher-btn">Добавить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Добавить предмет -->
+<div class="modal fade" id="addSubjectModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Добавить предмет</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div id="add-subject-error" class="alert alert-danger d-none"></div>
+        <form id="add-subject-form">
+          <div class="mb-2"><input type="text" name="name" class="form-control" placeholder="Название предмета" required></div>
+          <div class="mb-2"><input type="text" name="code" class="form-control" placeholder="Код (напр. CS103)"></div>
+          <div class="mb-2"><input type="text" name="semester" class="form-control" placeholder="Семестр (напр. 2025-2)"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-success" id="add-subject-btn">Добавить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Управление участниками предмета -->
+<div class="modal fade" id="membersModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Предмет: <span id="members-subject-name"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-md-6">
+            <h6>Преподаватели</h6>
+            <ul id="members-teachers-list" class="list-group mb-2"></ul>
+            <select id="assign-teacher-select" class="form-select form-select-sm mb-1"></select>
+            <button class="btn btn-outline-success btn-sm w-100" id="assign-teacher-btn">Назначить преподавателя</button>
+          </div>
+          <div class="col-md-6">
+            <h6>Студенты</h6>
+            <ul id="members-students-list" class="list-group mb-2"></ul>
+            <select id="enroll-student-select" class="form-select form-select-sm mb-1"></select>
+            <button class="btn btn-outline-success btn-sm w-100" id="enroll-student-btn">Записать студента</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Добавить задание -->
+<div class="modal fade" id="addAssignmentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Добавить задание</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div id="add-assignment-error" class="alert alert-danger d-none"></div>
+        <form id="add-assignment-form">
+          <div class="mb-2">
+            <select name="subject_id" id="assignment-subject-select" class="form-select" required>
+              <option value="">Выберите предмет</option>
+            </select>
+          </div>
+          <div class="mb-2"><input type="text" name="title" class="form-control" placeholder="Название задания" required></div>
+          <div class="mb-2"><textarea name="description" class="form-control" placeholder="Описание (необязательно)" rows="2"></textarea></div>
+          <div class="mb-2"><input type="date" name="deadline" class="form-control"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-success" id="add-assignment-btn">Добавить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  const TOKEN_KEY = 'admin_token';
+  const getToken = () => localStorage.getItem(TOKEN_KEY);
+  const authHeaders = () => ({ 'Authorization': `Bearer ${getToken()}` });
+  const formHeaders = () => ({ 'Authorization': `Bearer ${getToken()}`, 'Content-Type': 'application/x-www-form-urlencoded' });
+
+  let allTeachers = [];
+  let allStudents = [];
+  let currentSubjectId = null;
+
+  // ===== ВХОД =====
+  document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const err = document.getElementById('login-error');
+    err.classList.add('d-none');
+    const body = new URLSearchParams({
+      admin_id: document.getElementById('admin-id').value,
+      password: document.getElementById('admin-password').value
+    });
+    const res = await fetch('/api/admin/login', { method: 'POST', body });
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem(TOKEN_KEY, data.token);
+      showMain();
+    } else {
+      err.textContent = 'Неверный логин или пароль';
+      err.classList.remove('d-none');
+    }
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    localStorage.removeItem(TOKEN_KEY);
+    document.getElementById('main-section').style.display = 'none';
+    document.getElementById('login-section').style.display = '';
+  });
+
+  function showMain() {
+    document.getElementById('login-section').style.display = 'none';
+    document.getElementById('main-section').style.display = '';
+    loadAll();
+  }
+
+  async function loadAll() {
+    await Promise.all([loadStudents(), loadTeachers(), loadSubjects(), loadAssignments()]);
+  }
+
+  // ===== СТУДЕНТЫ =====
+  async function loadStudents() {
+    const res = await fetch('/api/admin/students', { headers: authHeaders() });
+    allStudents = await res.json();
+    const tbody = document.getElementById('students-tbody');
+    tbody.innerHTML = allStudents.map(s => `
+      <tr>
+        <td>${s.student_id}</td>
+        <td>${s.last_name} ${s.first_name}${s.patronymic ? ' ' + s.patronymic : ''}</td>
+        <td>${s.group_name || '—'}</td>
+        <td>${s.email || '—'}</td>
+        <td><button class="btn btn-outline-danger btn-sm" onclick="deleteStudent(${s.id})"><i class="bi bi-trash"></i></button></td>
+      </tr>`).join('');
+  }
+
+  document.getElementById('add-student-btn').addEventListener('click', async () => {
+    const form = document.getElementById('add-student-form');
+    const err = document.getElementById('add-student-error');
+    err.classList.add('d-none');
+    const body = new URLSearchParams(new FormData(form));
+    const res = await fetch('/api/admin/students', { method: 'POST', headers: formHeaders(), body });
+    if (res.ok) {
+      const data = await res.json();
+      bootstrap.Modal.getInstance(document.getElementById('addStudentModal')).hide();
+      form.reset();
+      document.getElementById('temp-password-value').textContent = data.temp_password;
+      document.getElementById('temp-password-alert').classList.remove('d-none');
+      loadStudents();
+    } else {
+      const e = await res.json();
+      err.textContent = e.detail || 'Ошибка';
+      err.classList.remove('d-none');
+    }
+  });
+
+  async function deleteStudent(id) {
+    if (!confirm('Удалить студента? Все его работы также будут удалены.')) return;
+    await fetch(`/api/admin/students/${id}`, { method: 'DELETE', headers: authHeaders() });
+    loadStudents();
+  }
+
+  // ===== ПРЕПОДАВАТЕЛИ =====
+  async function loadTeachers() {
+    const res = await fetch('/api/admin/teachers', { headers: authHeaders() });
+    allTeachers = await res.json();
+    const tbody = document.getElementById('teachers-tbody');
+    tbody.innerHTML = allTeachers.map(t => `
+      <tr>
+        <td>${t.teacher_id}</td>
+        <td>${t.last_name} ${t.first_name}${t.patronymic ? ' ' + t.patronymic : ''}</td>
+        <td>${t.email || '—'}</td>
+        <td><button class="btn btn-outline-danger btn-sm" onclick="deleteTeacher(${t.id})"><i class="bi bi-trash"></i></button></td>
+      </tr>`).join('');
+  }
+
+  document.getElementById('add-teacher-btn').addEventListener('click', async () => {
+    const form = document.getElementById('add-teacher-form');
+    const err = document.getElementById('add-teacher-error');
+    err.classList.add('d-none');
+    const body = new URLSearchParams(new FormData(form));
+    const res = await fetch('/api/admin/teachers', { method: 'POST', headers: formHeaders(), body });
+    if (res.ok) {
+      const data = await res.json();
+      bootstrap.Modal.getInstance(document.getElementById('addTeacherModal')).hide();
+      form.reset();
+      document.getElementById('temp-teacher-password-value').textContent = data.temp_password;
+      document.getElementById('temp-teacher-password-alert').classList.remove('d-none');
+      loadTeachers();
+    } else {
+      const e = await res.json();
+      err.textContent = e.detail || 'Ошибка';
+      err.classList.remove('d-none');
+    }
+  });
+
+  async function deleteTeacher(id) {
+    if (!confirm('Удалить преподавателя?')) return;
+    await fetch(`/api/admin/teachers/${id}`, { method: 'DELETE', headers: authHeaders() });
+    loadTeachers();
+  }
+
+  // ===== ПРЕДМЕТЫ =====
+  async function loadSubjects() {
+    const res = await fetch('/api/admin/subjects', { headers: authHeaders() });
+    const subjects = await res.json();
+    const tbody = document.getElementById('subjects-tbody');
+    tbody.innerHTML = subjects.map(s => `
+      <tr>
+        <td>${s.name}</td>
+        <td>${s.code || '—'}</td>
+        <td>${s.semester || '—'}</td>
+        <td>${s.teachers || '—'}</td>
+        <td class="text-nowrap">
+          <button class="btn btn-outline-primary btn-sm me-1" onclick="openMembers(${s.id}, '${s.name.replace(/'/g, "\\'")}')"><i class="bi bi-people"></i></button>
+          <button class="btn btn-outline-danger btn-sm" onclick="deleteSubject(${s.id})"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`).join('');
+
+    // Обновим dropdown предметов в форме задания
+    const sel = document.getElementById('assignment-subject-select');
+    sel.innerHTML = '<option value="">Выберите предмет</option>' +
+      subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  }
+
+  document.getElementById('add-subject-btn').addEventListener('click', async () => {
+    const form = document.getElementById('add-subject-form');
+    const err = document.getElementById('add-subject-error');
+    err.classList.add('d-none');
+    const body = new URLSearchParams(new FormData(form));
+    const res = await fetch('/api/admin/subjects', { method: 'POST', headers: formHeaders(), body });
+    if (res.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('addSubjectModal')).hide();
+      form.reset();
+      loadSubjects();
+    } else {
+      const e = await res.json();
+      err.textContent = e.detail || 'Ошибка';
+      err.classList.remove('d-none');
+    }
+  });
+
+  async function deleteSubject(id) {
+    if (!confirm('Удалить предмет? Все задания предмета также будут удалены.')) return;
+    await fetch(`/api/admin/subjects/${id}`, { method: 'DELETE', headers: authHeaders() });
+    loadSubjects();
+  }
+
+  // --- Управление участниками предмета ---
+  async function openMembers(subjectId, subjectName) {
+    currentSubjectId = subjectId;
+    document.getElementById('members-subject-name').textContent = subjectName;
+
+    // Заполнить выпадашки всеми преподавателями и студентами
+    document.getElementById('assign-teacher-select').innerHTML =
+      allTeachers.map(t => `<option value="${t.id}">${t.last_name} ${t.first_name} (${t.teacher_id})</option>`).join('');
+    document.getElementById('enroll-student-select').innerHTML =
+      allStudents.map(s => `<option value="${s.id}">${s.last_name} ${s.first_name} (${s.student_id})</option>`).join('');
+
+    await refreshMembers(subjectId);
+    new bootstrap.Modal(document.getElementById('membersModal')).show();
+  }
+
+  async function refreshMembers(subjectId) {
+    const res = await fetch(`/api/admin/subjects/${subjectId}/members`, { headers: authHeaders() });
+    const data = await res.json();
+
+    document.getElementById('members-teachers-list').innerHTML = data.teachers.map(t => `
+      <li class="list-group-item d-flex justify-content-between align-items-center py-1">
+        ${t.name}
+        <button class="btn btn-outline-danger btn-sm" onclick="removeTeacher(${t.id})"><i class="bi bi-x"></i></button>
+      </li>`).join('') || '<li class="list-group-item text-muted">Нет преподавателей</li>';
+
+    document.getElementById('members-students-list').innerHTML = data.students.map(s => `
+      <li class="list-group-item d-flex justify-content-between align-items-center py-1">
+        ${s.name}
+        <button class="btn btn-outline-danger btn-sm" onclick="unenrollStudent(${s.id})"><i class="bi bi-x"></i></button>
+      </li>`).join('') || '<li class="list-group-item text-muted">Нет студентов</li>';
+  }
+
+  document.getElementById('assign-teacher-btn').addEventListener('click', async () => {
+    const teacherId = document.getElementById('assign-teacher-select').value;
+    if (!teacherId) return;
+    await fetch(`/api/admin/subjects/${currentSubjectId}/teachers`, {
+      method: 'POST', headers: formHeaders(),
+      body: new URLSearchParams({ teacher_id: teacherId })
+    });
+    refreshMembers(currentSubjectId);
+    loadSubjects();
+  });
+
+  document.getElementById('enroll-student-btn').addEventListener('click', async () => {
+    const studentId = document.getElementById('enroll-student-select').value;
+    if (!studentId) return;
+    await fetch(`/api/admin/subjects/${currentSubjectId}/students`, {
+      method: 'POST', headers: formHeaders(),
+      body: new URLSearchParams({ student_id: studentId })
+    });
+    refreshMembers(currentSubjectId);
+  });
+
+  async function removeTeacher(teacherId) {
+    await fetch(`/api/admin/subjects/${currentSubjectId}/teachers/${teacherId}`, {
+      method: 'DELETE', headers: authHeaders()
+    });
+    refreshMembers(currentSubjectId);
+    loadSubjects();
+  }
+
+  async function unenrollStudent(studentId) {
+    await fetch(`/api/admin/subjects/${currentSubjectId}/students/${studentId}`, {
+      method: 'DELETE', headers: authHeaders()
+    });
+    refreshMembers(currentSubjectId);
+  }
+
+  // ===== ЗАДАНИЯ =====
+  async function loadAssignments() {
+    const res = await fetch('/api/admin/assignments', { headers: authHeaders() });
+    const assignments = await res.json();
+    const tbody = document.getElementById('assignments-tbody');
+    tbody.innerHTML = assignments.map(a => `
+      <tr>
+        <td>${a.subject}</td>
+        <td>${a.title}</td>
+        <td>${a.deadline || '—'}</td>
+        <td><button class="btn btn-outline-danger btn-sm" onclick="deleteAssignment(${a.id})"><i class="bi bi-trash"></i></button></td>
+      </tr>`).join('');
+  }
+
+  document.getElementById('open-add-assignment-btn').addEventListener('click', () => {
+    new bootstrap.Modal(document.getElementById('addAssignmentModal')).show();
+  });
+
+  document.getElementById('add-assignment-btn').addEventListener('click', async () => {
+    const form = document.getElementById('add-assignment-form');
+    const err = document.getElementById('add-assignment-error');
+    err.classList.add('d-none');
+    const body = new URLSearchParams(new FormData(form));
+    const res = await fetch('/api/admin/assignments', { method: 'POST', headers: formHeaders(), body });
+    if (res.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('addAssignmentModal')).hide();
+      form.reset();
+      loadAssignments();
+    } else {
+      const e = await res.json();
+      err.textContent = e.detail || 'Ошибка';
+      err.classList.remove('d-none');
+    }
+  });
+
+  async function deleteAssignment(id) {
+    if (!confirm('Удалить задание?')) return;
+    await fetch(`/api/admin/assignments/${id}`, { method: 'DELETE', headers: authHeaders() });
+    loadAssignments();
+  }
+
+  // ===== ИНИЦИАЛИЗАЦИЯ =====
+  if (getToken()) showMain();
+</script>
+</body>
+</html>

@@ -107,3 +107,19 @@ CREATE TABLE IF NOT EXISTS teacher_feedback_files (
     uploaded_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE
 );
+
+-- Администраторы
+CREATE TABLE IF NOT EXISTS admins (
+    id            SERIAL PRIMARY KEY,
+    admin_id      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Расширяем допустимые типы сессий для admin
+DO $$
+BEGIN
+    ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_user_type_check;
+    ALTER TABLE sessions ADD CONSTRAINT sessions_user_type_check
+        CHECK (user_type IN ('student', 'teacher', 'admin'));
+END $$;

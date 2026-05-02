@@ -141,6 +141,13 @@ def seed_data():
                     ON CONFLICT DO NOTHING
                 """, subject_teacher_links)
 
+                # === Администратор ===
+                cur.execute("""
+                    INSERT INTO admins (admin_id, password_hash)
+                    VALUES (%s, %s)
+                    ON CONFLICT DO NOTHING
+                """, ("admin", hash_password("admin1234")))
+
                 print("✅ Тестовые данные успешно добавлены.")
 
 

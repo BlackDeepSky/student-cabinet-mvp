@@ -6,6 +6,8 @@ Backend на FastAPI + PostgreSQL + Cloudflare R2
 import os
 import re
 import secrets
+from dotenv import load_dotenv
+load_dotenv()
 from datetime import timedelta, datetime
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Header

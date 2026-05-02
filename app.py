@@ -211,6 +211,30 @@ async def teacher_page():
     with open("static/teacher.html", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
+@app.get("/sw.js")
+async def service_worker():
+    return FileResponse("static/sw.js", media_type="application/javascript")
+
+@app.get("/api/badge")
+async def get_badge(session = Depends(require_auth)):
+    user_id, user_type = session
+    with get_db() as conn:
+        if user_type == "student":
+            cur = conn.execute("""
+                SELECT COUNT(*) FROM submissions
+                WHERE student_id = %s AND status = 'rejected'
+            """, (user_id,))
+        elif user_type == "teacher":
+            cur = conn.execute("""
+                SELECT COUNT(*) FROM submissions s
+                JOIN assignments a ON a.id = s.assignment_id
+                JOIN subject_teachers st ON st.subject_id = a.subject_id
+                WHERE st.teacher_id = %s AND s.status IN ('submitted', 'resubmitted')
+            """, (user_id,))
+        else:
+            return {"count": 0}
+        return {"count": cur.fetchone()[0]}
+
 # ===== СТУДЕНТ =====
 
 @app.post("/api/login")

@@ -40,13 +40,13 @@
     <!-- Форма входа -->
     <div id="login-section" class="card p-4 mb-4">
       <h3>Вход</h3>
-      <p>Введите ваш ID преподавателя и дату рождения</p>
+      <p>Введите ваш ID преподавателя и пароль</p>
       <form id="login-form">
         <div class="mb-3">
           <input type="text" id="teacher-id" class="form-control" placeholder="ID преподавателя (например: T-MATH-01)" required>
         </div>
         <div class="mb-3">
-          <input type="password" id="password" class="form-control" placeholder="Дата рождения (ДД.ММ.ГГГГ)" required>
+          <input type="password" id="password" class="form-control" placeholder="Пароль" required>
         </div>
         <button type="submit" class="btn btn-primary">Войти</button>
       </form>
@@ -56,7 +56,10 @@
     <div id="main-section" style="display:none;">
       <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Добро пожаловать, <span id="teacher-name"></span>!</h2>
-        <button id="logout-btn" class="btn btn-outline-secondary">Выйти</button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#changePasswordModal">Сменить пароль</button>
+          <button id="logout-btn" class="btn btn-outline-secondary">Выйти</button>
+        </div>
       </div>
 
       <!-- Кнопка истории -->
@@ -560,6 +563,85 @@
       alert('Статус сохранён');
       bootstrap.Modal.getInstance(document.getElementById('gradeModal')).hide();
       loadSubmissions();
+    });
+  </script>
+
+  <!-- Модальное окно: смена пароля -->
+  <div class="modal fade" id="changePasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Сменить пароль</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="change-password-alert" class="alert d-none"></div>
+          <form id="change-password-form">
+            <div class="mb-3">
+              <label class="form-label">Текущий пароль</label>
+              <input type="password" id="cp-old" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Новый пароль</label>
+              <input type="password" id="cp-new" class="form-control" minlength="8" required>
+              <div class="form-text">Минимум 8 символов</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Повторите новый пароль</label>
+              <input type="password" id="cp-confirm" class="form-control" required>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="button" class="btn btn-primary" id="cp-submit-btn">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('cp-submit-btn').addEventListener('click', async () => {
+      const alert = document.getElementById('change-password-alert');
+      const oldPwd = document.getElementById('cp-old').value;
+      const newPwd = document.getElementById('cp-new').value;
+      const confirm = document.getElementById('cp-confirm').value;
+
+      alert.className = 'alert d-none';
+
+      if (newPwd !== confirm) {
+        alert.className = 'alert alert-danger';
+        alert.textContent = 'Новые пароли не совпадают';
+        return;
+      }
+      if (newPwd.length < 8) {
+        alert.className = 'alert alert-danger';
+        alert.textContent = 'Пароль должен содержать минимум 8 символов';
+        return;
+      }
+
+      const token = localStorage.getItem('teacher_token');
+      const body = new URLSearchParams({ old_password: oldPwd, new_password: newPwd });
+      const res = await fetch('/api/change-password', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      });
+
+      if (res.ok) {
+        alert.className = 'alert alert-success';
+        alert.textContent = 'Пароль успешно изменён';
+        document.getElementById('change-password-form').reset();
+      } else {
+        const err = await res.json();
+        alert.className = 'alert alert-danger';
+        alert.textContent = err.detail || 'Ошибка при смене пароля';
+      }
+    });
+
+    document.getElementById('changePasswordModal').addEventListener('hidden.bs.modal', () => {
+      document.getElementById('change-password-form').reset();
+      document.getElementById('change-password-alert').className = 'alert d-none';
     });
   </script>
 </body>

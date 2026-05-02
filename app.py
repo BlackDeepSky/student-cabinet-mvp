@@ -26,6 +26,9 @@ from botocore.exceptions import ClientError
 def verify_password(password: str, hashed: str) -> bool:
     return _bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
+def hash_password(password: str) -> str:
+    return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
+
 # === Константы ===
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 МБ
 VALID_ID_PATTERN = re.compile(r"^[A-Za-z0-9\-_]+$")
@@ -416,6 +419,31 @@ async def get_my_grades(session = Depends(require_auth)):
                 "graded_at": formatted_date
             })
         return grades
+
+# ===== ОБЩЕЕ =====
+
+@app.post("/api/change-password")
+async def change_password(
+    old_password: str = Form(...),
+    new_password: str = Form(...),
+    session = Depends(require_auth)
+):
+    user_id, user_type = session
+    if len(new_password) < 8:
+        raise HTTPException(400, "Новый пароль должен содержать минимум 8 символов")
+
+    table = "students" if user_type == "student" else "teachers"
+    with get_db() as conn:
+        cur = conn.execute(f"SELECT password_hash FROM {table} WHERE id = %s", (user_id,))
+        row = cur.fetchone()
+        if not row or not verify_password(old_password, row["password_hash"]):
+            raise HTTPException(400, "Неверный текущий пароль")
+        conn.execute(
+            f"UPDATE {table} SET password_hash = %s WHERE id = %s",
+            (hash_password(new_password), user_id)
+        )
+    return {"ok": True}
+
 
 # ===== ПРЕПОДАВАТЕЛЬ =====
 

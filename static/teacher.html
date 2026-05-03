@@ -13,90 +13,168 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
-    .status-badge {
-      font-size: 0.85em;
-      padding: 0.25em 0.5em;
-      border-radius: 0.25rem;
-      margin-left: 8px;
-      vertical-align: middle;
+    :root { --brand: #198754; --brand-dark: #146c43; }
+    body { background: #f0f4f8; min-height: 100vh; }
+
+    .app-navbar {
+      background: var(--brand);
+      padding: 0 1rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
     }
-    .status-in_review { background-color: #ffc107; color: #212529; }
-    .status-approved { background-color: #28a745; color: white; }
-    .status-rejected { background-color: #dc3545; color: white; }
-    .review-block {
-      background-color: #f8d7da;
-      border-left: 4px solid #dc3545;
-      padding: 0.75rem;
-      margin-top: 0.75rem;
-      font-size: 0.95em;
-      border-radius: 0.25rem;
+    .app-navbar .brand {
+      color: #fff;
+      font-weight: 700;
+      font-size: 1.1rem;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    .modal.files-modal {
-      z-index: 1060; 
+    .app-navbar .brand i { font-size: 1.3rem; }
+    .app-navbar .nav-actions { display: flex; gap: 8px; align-items: center; }
+    .app-navbar .teacher-name { color: rgba(255,255,255,.85); font-size: .9rem; }
+
+    .login-wrapper {
+      min-height: calc(100vh - 56px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
     }
-    .modal-backdrop.files-backdrop {
-      z-index: 1055;
+    .login-card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.10);
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 400px;
     }
+    .login-card .login-icon {
+      width: 56px; height: 56px;
+      background: var(--brand);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 1.25rem;
+    }
+    .login-card .login-icon i { color: #fff; font-size: 1.6rem; }
+    .login-card h2 { text-align: center; font-size: 1.3rem; font-weight: 700; margin-bottom: .25rem; }
+    .login-card .login-sub { text-align: center; color: #6c757d; font-size: .9rem; margin-bottom: 1.5rem; }
+
+    .status-badge { font-size: .8em; padding: .2em .55em; border-radius: .25rem; margin-left: 6px; vertical-align: middle; font-weight: 500; }
+    .status-submitted  { background: #e9ecef; color: #495057; }
+    .status-in_review  { background: #fff3cd; color: #856404; }
+    .status-approved   { background: #d1e7dd; color: #0a3622; }
+    .status-rejected   { background: #f8d7da; color: #58151c; }
+
+    .section-card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.07);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .table { margin-bottom: 0; }
+    .toast-container { z-index: 9999; }
   </style>
 </head>
-<body class="bg-light">
-  <div class="container py-4">
-    <h1 class="mb-4">Кабинет преподавателя</h1>
+<body>
 
-    <!-- Форма входа -->
-    <div id="login-section" class="card p-4 mb-4">
-      <h3>Вход</h3>
-      <p>Введите ваш ID преподавателя и пароль</p>
+  <!-- Navbar -->
+  <nav class="app-navbar" id="app-navbar" style="display:none">
+    <a href="#" class="brand">
+      <i class="bi bi-mortarboard-fill"></i>
+      КабинетЗаочника
+    </a>
+    <div class="nav-actions">
+      <span class="teacher-name d-none d-sm-inline"><i class="bi bi-person-circle me-1"></i><span id="teacher-name-nav"></span></span>
+      <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+        <i class="bi bi-key me-1"></i>Пароль
+      </button>
+      <button id="logout-btn" class="btn btn-sm btn-outline-light">
+        <i class="bi bi-box-arrow-right me-1"></i>Выйти
+      </button>
+    </div>
+  </nav>
+
+  <!-- Login -->
+  <div id="login-section" class="login-wrapper">
+    <div class="login-card">
+      <div class="login-icon"><i class="bi bi-person-workspace"></i></div>
+      <h2>КабинетЗаочника</h2>
+      <p class="login-sub">Кабинет преподавателя</p>
+      <div id="login-error" class="alert alert-danger d-none py-2"></div>
       <form id="login-form">
         <div class="mb-3">
-          <input type="text" id="teacher-id" class="form-control" placeholder="ID преподавателя (например: T-MATH-01)" required>
+          <label class="form-label fw-semibold">ID преподавателя</label>
+          <input type="text" id="teacher-id" class="form-control" placeholder="Например: T-MATH-01" required>
         </div>
-        <div class="mb-3">
-          <input type="password" id="password" class="form-control" placeholder="Пароль" required>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Пароль</label>
+          <input type="password" id="password" class="form-control" placeholder="Введите пароль" required>
         </div>
-        <button type="submit" class="btn btn-primary">Войти</button>
+        <button type="submit" class="btn btn-success w-100" style="border-radius:8px;padding:.6rem">
+          <i class="bi bi-box-arrow-in-right me-1"></i>Войти
+        </button>
       </form>
+      <p class="text-center text-muted mt-3" style="font-size:.8rem">
+        Студент? <a href="/static/index.html">Войти в кабинет студента</a>
+      </p>
     </div>
+  </div>
 
-    <!-- Основной интерфейс -->
-    <div id="main-section" style="display:none;">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Добро пожаловать, <span id="teacher-name"></span>!</h2>
-        <div class="d-flex gap-2">
-          <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#changePasswordModal">Сменить пароль</button>
-          <button id="logout-btn" class="btn btn-outline-secondary">Выйти</button>
+  <!-- Main -->
+  <div id="main-section" style="display:none">
+    <div class="container py-4">
+      <div class="section-card">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <h6 class="mb-0 fw-bold text-uppercase text-muted" style="letter-spacing:.06em;font-size:.8rem">
+            <i class="bi bi-journal-text me-2"></i>Работы студентов
+          </h6>
+          <div class="d-flex gap-2 flex-wrap">
+            <button id="show-progress-btn" class="btn btn-outline-primary btn-sm">
+              <i class="bi bi-bar-chart-line me-1"></i>Прогресс студентов
+            </button>
+            <button id="show-history-btn" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-clock-history me-1"></i>История зачтённых
+            </button>
+          </div>
         </div>
-      </div>
 
-      <!-- Кнопки истории и прогресса -->
-      <div class="d-flex justify-content-between mb-3">
-        <h3>Работы студентов</h3>
-        <div class="d-flex gap-2">
-          <button id="show-progress-btn" class="btn btn-outline-primary">📊 Прогресс студентов</button>
-          <button id="show-history-btn" class="btn btn-outline-info">📜 История зачтённых</button>
+        <div class="table-responsive mt-3">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Студент</th>
+                <th>Предмет</th>
+                <th>Задание</th>
+                <th>Статус</th>
+                <th>Дата</th>
+                <th>Файлы</th>
+                <th>Действие</th>
+              </tr>
+            </thead>
+            <tbody id="submissions"></tbody>
+          </table>
         </div>
-      </div>
-
-      <div class="table-responsive">
-        <table class="table table-bordered">
-          <thead>
-            <tr>
-              <th>Студент</th>
-              <th>Предмет</th>
-              <th>Задание</th>
-              <th>Статус</th>
-              <th>Дата действия</th>
-              <th>Файлы</th>
-              <th>Оценка</th>
-            </tr>
-          </thead>
-          <tbody id="submissions"></tbody>
-        </table>
       </div>
     </div>
   </div>
 
-  <!-- Модальное окно: выставление статуса -->
+  <!-- Toast -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="app-toast" class="toast align-items-center border-0" role="alert">
+      <div class="d-flex">
+        <div class="toast-body" id="app-toast-body"></div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: статус -->
   <div class="modal fade" id="gradeModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -109,7 +187,6 @@
             <input type="hidden" id="modal-student-id">
             <input type="hidden" id="modal-subject-name">
             <input type="hidden" id="modal-assignment-id">
-            
             <div class="mb-3">
               <label class="form-label">Статус</label>
               <select class="form-select" id="status-input" required>
@@ -126,34 +203,32 @@
               <label class="form-label">Файл с комментарием (опционально)</label>
               <input type="file" class="form-control" id="feedback-file">
             </div>
-            <button type="submit" class="btn btn-primary">Сохранить</button>
+            <button type="submit" class="btn btn-success">Сохранить</button>
           </form>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Модальное окно: файлы -->
-  <div class="modal fade files-modal" id="filesModal" tabindex="-1">
+  <!-- Modal: файлы -->
+  <div class="modal fade" id="filesModal" tabindex="-1" style="z-index:1065">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">Файлы работы</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body" id="files-list">
-          <!-- Сюда подгружаются файлы -->
-        </div>
+        <div class="modal-body" id="files-list"></div>
       </div>
     </div>
   </div>
 
-  <!-- Модальное окно: прогресс студентов -->
+  <!-- Modal: прогресс -->
   <div class="modal fade" id="progressModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Прогресс студентов</h5>
+          <h5 class="modal-title"><i class="bi bi-bar-chart-line me-2"></i>Прогресс студентов</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
@@ -164,14 +239,10 @@
           </div>
           <div class="table-responsive">
             <table class="table table-bordered table-sm">
-              <thead>
+              <thead class="table-light">
                 <tr>
-                  <th>Студент</th>
-                  <th>Предмет</th>
-                  <th>Задание</th>
-                  <th>Дедлайн</th>
-                  <th>Статус</th>
-                  <th>Дата сдачи</th>
+                  <th>Студент</th><th>Предмет</th><th>Задание</th>
+                  <th>Дедлайн</th><th>Статус</th><th>Дата сдачи</th>
                 </tr>
               </thead>
               <tbody id="progress-rows"></tbody>
@@ -183,24 +254,19 @@
     </div>
   </div>
 
-  <!-- Модальное окно: история -->
+  <!-- Modal: история -->
   <div class="modal fade" id="historyModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">История зачтённых работ</h5>
+          <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>История зачтённых работ</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
           <div class="table-responsive">
             <table class="table table-bordered">
-              <thead>
-                <tr>
-                  <th>Студент</th>
-                  <th>Предмет</th>
-                  <th>Задание</th>
-                  <th>Дата зачёта</th>
-                </tr>
+              <thead class="table-light">
+                <tr><th>Студент</th><th>Предмет</th><th>Задание</th><th>Дата зачёта</th></tr>
               </thead>
               <tbody id="history-rows"></tbody>
             </table>
@@ -211,543 +277,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js');
-    }
-
-    async function updateBadge() {
-      const token = localStorage.getItem('teacher_token');
-      if (!token) return;
-      try {
-        const res = await fetch('/api/badge', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) return;
-        const { count } = await res.json();
-        if ('setAppBadge' in navigator) {
-          count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge();
-        }
-        document.title = count > 0 ? `(${count}) Кабинет преподавателя` : 'Кабинет преподавателя';
-      } catch {}
-    }
-
-    setInterval(updateBadge, 60000);
-
-    function deadlineBadge(deadlineStr) {
-      if (!deadlineStr) return '<span class="badge bg-secondary">Без дедлайна</span>';
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      const due = new Date(deadlineStr);
-      const days = Math.round((due - now) / 86400000);
-      if (days < 0) return `<span class="badge bg-danger">Просрочено (${due.toLocaleDateString('ru-RU')})</span>`;
-      if (days <= 7) return `<span class="badge bg-warning text-dark">Дедлайн: ${due.toLocaleDateString('ru-RU')} (${days} дн.)</span>`;
-      return `<span class="badge bg-success">Дедлайн: ${due.toLocaleDateString('ru-RU')}</span>`;
-    }
-
-    function deadlineSortKey(deadlineStr) {
-      if (!deadlineStr) return Infinity;
-      const now = new Date(); now.setHours(0, 0, 0, 0);
-      return Math.round((new Date(deadlineStr) - now) / 86400000);
-    }
-
-    // Вспомогательная функция для получения заголовков с токеном
-    function getAuthHeaders() {
-      const token = localStorage.getItem('teacher_token');
-      return token ? { 'Authorization': `Bearer ${token}` } : {};
-    }
-
-    // Проверка авторизации при загрузке
-    window.addEventListener('load', () => {
-      const token = localStorage.getItem('teacher_token');
-      const name = localStorage.getItem('teacher_name');
-      if (token && name) {
-        document.getElementById('teacher-name').textContent = name;
-        loadSubmissions();
-        showMain();
-      } else {
-        showLogin();
-      }
-    });
-
-    function showLogin() {
-      document.getElementById('login-section').style.display = 'block';
-      document.getElementById('main-section').style.display = 'none';
-    }
-
-    function showMain() {
-      document.getElementById('login-section').style.display = 'none';
-      document.getElementById('main-section').style.display = 'block';
-    }
-
-    // Вход
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const teacherId = document.getElementById('teacher-id').value.trim();
-      const password = document.getElementById('password').value.trim();
-      if (!teacherId || !password) return;
-
-      try {
-        const res = await fetch('/api/teacher/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `teacher_id=${encodeURIComponent(teacherId)}&password=${encodeURIComponent(password)}`
-        });
-        if (!res.ok) {
-          const error = await res.json().catch(() => ({detail: 'Ошибка входа'}));
-          throw new Error(error.detail || 'Неверные данные');
-        }
-        const data = await res.json();
-        localStorage.setItem('teacher_token', data.token);
-        localStorage.setItem('teacher_name', 
-          `${data.user.last_name} ${data.user.first_name}${data.user.patronymic ? ' ' + data.user.patronymic : ''}`
-        );
-        document.getElementById('teacher-name').textContent = 
-          `${data.user.last_name} ${data.user.first_name}${data.user.patronymic ? ' ' + data.user.patronymic : ''}`;
-        loadSubmissions();
-        showMain();
-      } catch (err) {
-        alert('Ошибка: ' + err.message);
-      }
-    });
-
-    // Выход
-    document.getElementById('logout-btn').addEventListener('click', () => {
-      localStorage.removeItem('teacher_token');
-      localStorage.removeItem('teacher_name');
-      showLogin();
-    });
-
-    // Загрузка работ (только актуальные)
-    async function loadSubmissions() {
-      try {
-        const res = await fetch('/api/teacher/assignments/me', {
-          headers: getAuthHeaders()
-        });
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) {
-            alert('Сессия преподавателя истекла. Пожалуйста, войдите снова.');
-            localStorage.removeItem('teacher_token');
-            localStorage.removeItem('teacher_name');
-            showLogin();
-            return;
-          }
-          throw new Error('Ошибка загрузки работ');
-        }
-        const submissions = await res.json();
-        submissions.sort((a, b) => deadlineSortKey(a.deadline) - deadlineSortKey(b.deadline));
-        const tbody = document.getElementById('submissions');
-        tbody.innerHTML = '';
-
-        submissions.forEach(row => {
-          let statusBadge = '';
-          if (row.last_status_label) {
-            // Определяем CSS-класс по техническому статусу
-            const statusClassMap = {
-              'submitted': 'status-submitted',
-              'in_review': 'status-in_review',
-              'approved': 'status-approved',
-              'rejected': 'status-rejected',
-              'resubmitted': 'status-rejected'
-            };
-            const cls = statusClassMap[row.last_status] || 'status-submitted';
-            statusBadge = `<span class="status-badge ${cls}">${row.last_status_label}</span>`;
-          }
-
-          let lastAction = '—';
-          if (row.last_action_at) {
-            lastAction = new Date(row.last_action_at).toLocaleString('ru-RU');
-          } else if (row.submitted_at) {
-            lastAction = new Date(row.submitted_at).toLocaleString('ru-RU') + ' (отправлена)';
-          }
-
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${row.student_name}<br><small>${row.student_id}</small></td>
-            <td>${row.subject}</td>
-            <td>${row.title}<br>${deadlineBadge(row.deadline)}</td>
-            <td>${statusBadge || row.last_status_label || '—'}</td>
-            <td>${lastAction}</td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary view-files" 
-                      data-assignment-id="${row.assignment_id}" 
-                      data-student-id="${row.student_id}">
-                📎 Файлы
-              </button>
-            </td>
-            <td>
-              <button class="btn btn-sm btn-outline-success set-grade"
-                      data-student-id="${row.student_id}"
-                      data-subject-name="${row.subject}"
-                      data-assignment-id="${row.assignment_id}">
-                ✏️ Статус
-              </button>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        });
-
-        // Обработчики кнопок
-        document.querySelectorAll('.view-files').forEach(btn => {
-          btn.addEventListener('click', async (e) => {
-            const assignmentId = e.target.dataset.assignmentId;
-            const studentId = e.target.dataset.studentId;
-            const res = await fetch(`/api/teacher/files/${assignmentId}/${studentId}`, {
-              headers: getAuthHeaders()
-            });
-            const files = await res.json();
-            
-            const filesList = document.getElementById('files-list');
-            filesList.innerHTML = '';
-            
-            if (files.length === 0) {
-              filesList.innerHTML = '<p class="text-muted">Файлы не найдены</p>';
-            } else {
-              files.forEach(f => {
-                const button = document.createElement('button');
-                button.className = 'btn btn-sm btn-outline-secondary w-100 mb-2';
-                button.textContent = `📎 ${f.name}`;
-                button.onclick = async () => {
-                  try {
-                    const res = await fetch(`/download/${f.path}`, {
-                      headers: getAuthHeaders()
-                    });
-                    if (!res.ok) throw new Error('Ошибка скачивания');
-                    
-                    const blob = await res.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = f.name;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    a.remove();
-                  } catch (err) {
-                    alert('Не удалось скачать файл: ' + err.message);
-                  }
-                };
-                filesList.appendChild(button);
-              });
-            }
-            
-            const filesModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal'));
-            filesModal.show();
-
-            // Повышаем z-index backdrop'а
-            setTimeout(() => {
-              const backdrop = document.querySelector('.modal-backdrop');
-              if (backdrop) {
-                backdrop.classList.add('files-backdrop');
-              }
-            }, 10);
-          });
-        });
-
-        document.querySelectorAll('.set-grade').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            const modal = document.getElementById('gradeModal');
-            document.getElementById('modal-student-id').value = e.target.dataset.studentId;
-            document.getElementById('modal-subject-name').value = e.target.dataset.subjectName;
-            document.getElementById('modal-assignment-id').value = e.target.dataset.assignmentId;
-            document.getElementById('review').value = '';
-            
-            // Сброс файла
-            document.getElementById('feedback-file').value = '';
-            
-            // Показ/скрытие блока файла
-            const statusSelect = document.getElementById('status-input');
-            const feedbackBlock = document.getElementById('feedback-file-block');
-            const currentStatus = e.target.closest('tr').querySelector('.status-badge')?.textContent || '';
-            if (currentStatus.includes('Не зачтено')) {
-              feedbackBlock.style.display = 'block';
-            } else {
-              feedbackBlock.style.display = 'none';
-            }
-            
-            // Слушатель изменения статуса
-            statusSelect.onchange = () => {
-              if (statusSelect.value === 'не зачтено') {
-                feedbackBlock.style.display = 'block';
-              } else {
-                feedbackBlock.style.display = 'none';
-                document.getElementById('feedback-file').value = '';
-              }
-            };
-            
-            bootstrap.Modal.getOrCreateInstance(modal).show();
-          });
-        });
-      } catch (err) {
-        console.error('Ошибка при загрузке работ:', err);
-        alert('Требуется повторный вход');
-        localStorage.removeItem('teacher_token');
-        showLogin();
-      }
-    }
-
-    // Загрузка истории зачтённых работ
-    async function loadHistory() {
-      try {
-        const res = await fetch(`/api/teacher/history/me`, {
-          headers: getAuthHeaders()
-        });
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) {
-            alert('Сессия преподавателя истекла. Пожалуйста, войдите снова.');
-            localStorage.removeItem('teacher_token');
-            localStorage.removeItem('teacher_name');
-            showLogin();
-            return;
-          }
-          throw new Error('Ошибка загрузки истории');
-        }
-        const history = await res.json();
-        const tbody = document.getElementById('history-rows');
-        const emptyMsg = document.getElementById('history-empty');
-        
-        tbody.innerHTML = '';
-        if (history.length === 0) {
-          emptyMsg.style.display = 'block';
-        } else {
-          emptyMsg.style.display = 'none';
-          history.forEach(item => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${item.student_name}<br><small>${item.student_id}</small></td>
-              <td>${item.subject}</td>
-              <td>${item.assignment_title}</td>
-              <td>
-                ${new Date(item.graded_at).toLocaleString('ru-RU')}
-                <br>
-                <button class="btn btn-sm btn-outline-primary mt-1 history-view-files"
-                        data-assignment-id="${item.assignment_id}"
-                        data-student-id="${item.student_id}">
-                  📎 Файлы
-                </button>
-              </td>
-            `;
-            tbody.appendChild(tr);
-          });
-
-          // Навешиваем обработчики для кнопок "Файлы" в истории
-          document.querySelectorAll('.history-view-files').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-              const assignmentId = e.target.dataset.assignmentId;
-              const studentId = e.target.dataset.studentId;
-              const res = await fetch(`/api/teacher/files/${assignmentId}/${studentId}`, {
-                headers: getAuthHeaders()
-              });
-              const files = await res.json();
-              
-              const filesList = document.getElementById('files-list');
-              filesList.innerHTML = '';
-              
-              if (files.length === 0) {
-                filesList.innerHTML = '<p class="text-muted">Файлы не найдены</p>';
-              } else {
-                files.forEach(f => {
-                  const button = document.createElement('button');
-                  button.className = 'btn btn-sm btn-outline-secondary w-100 mb-2';
-                  button.textContent = `📎 ${f.name}`;
-                  button.onclick = async () => {
-                    try {
-                      const res = await fetch(`/download/${f.path}`, {
-                        headers: getAuthHeaders()
-                      });
-                      if (!res.ok) throw new Error('Ошибка скачивания');
-                      
-                      const blob = await res.blob();
-                      const url = window.URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = f.name;
-                      document.body.appendChild(a);
-                      a.click();
-                      window.URL.revokeObjectURL(url);
-                      a.remove();
-                    } catch (err) {
-                      alert('Не удалось скачать файл: ' + err.message);
-                    }
-                  };
-                  filesList.appendChild(button);
-                });
-              }
-              
-              bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
-            });
-          });
-        }
-
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('historyModal')).show();
-      } catch (err) {
-        console.error('Ошибка при загрузке истории:', err);
-        alert('Ошибка загрузки истории: ' + err.message);
-      }
-    }
-
-    // Прогресс студентов
-    let progressData = [];
-
-    async function loadProgress(subjectId) {
-      const url = subjectId ? `/api/teacher/progress?subject_id=${subjectId}` : '/api/teacher/progress';
-      const res = await fetch(url, { headers: getAuthHeaders() });
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          localStorage.removeItem('teacher_token');
-          localStorage.removeItem('teacher_name');
-          showLogin();
-          return;
-        }
-        alert('Ошибка загрузки прогресса');
-        return;
-      }
-      const data = await res.json();
-
-      // Заполняем фильтр при первой загрузке
-      const filter = document.getElementById('progress-subject-filter');
-      if (filter.options.length === 1) {
-        data.subjects.forEach(s => {
-          const opt = document.createElement('option');
-          opt.value = s.id;
-          opt.textContent = s.name;
-          filter.appendChild(opt);
-        });
-      }
-
-      renderProgress(data.rows);
-    }
-
-    function renderProgress(rows) {
-      const tbody = document.getElementById('progress-rows');
-      const emptyMsg = document.getElementById('progress-empty');
-      tbody.innerHTML = '';
-
-      if (rows.length === 0) {
-        emptyMsg.style.display = 'block';
-        return;
-      }
-      emptyMsg.style.display = 'none';
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const STATUS_LABELS = {
-        submitted: 'Отправлено',
-        in_review: 'На рассмотрении',
-        approved: 'Зачтено',
-        rejected: 'Не зачтено',
-        resubmitted: 'Повторно отправлено'
-      };
-
-      rows.forEach(row => {
-        const isApproved = row.status === 'approved';
-        const isNotSubmitted = !row.status;
-        const isRejected = row.status === 'rejected';
-        const deadline = row.deadline ? new Date(row.deadline) : null;
-        const isOverdue = deadline && deadline < today && !isApproved;
-
-        let rowClass = '';
-        if (isApproved) rowClass = 'table-success';
-        else if (isOverdue && isNotSubmitted) rowClass = 'table-danger';
-        else if (isNotSubmitted || isRejected) rowClass = 'table-warning';
-
-        const deadlineStr = deadline
-          ? deadline.toLocaleDateString('ru-RU') + (isOverdue ? ' ⚠️' : '')
-          : '—';
-        const statusLabel = row.status ? STATUS_LABELS[row.status] || row.status : 'Не сдано';
-        const submittedAt = row.submitted_at
-          ? new Date(row.submitted_at).toLocaleDateString('ru-RU')
-          : '—';
-
-        const tr = document.createElement('tr');
-        if (rowClass) tr.className = rowClass;
-        tr.innerHTML = `
-          <td>${row.student_name}<br><small class="text-muted">${row.student_id}</small></td>
-          <td>${row.subject}</td>
-          <td>${row.assignment_title}</td>
-          <td>${deadlineStr}</td>
-          <td>${statusLabel}</td>
-          <td>${submittedAt}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    document.getElementById('show-progress-btn').addEventListener('click', () => {
-      bootstrap.Modal.getOrCreateInstance(document.getElementById('progressModal')).show();
-      loadProgress('');
-    });
-
-    document.getElementById('progress-subject-filter').addEventListener('change', (e) => {
-      loadProgress(e.target.value);
-    });
-
-    // Кнопка "История"
-    document.getElementById('show-history-btn').addEventListener('click', loadHistory);
-
-    // Сохранение оценки
-    document.getElementById('grade-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const studentId = document.getElementById('modal-student-id').value;
-      const subjectName = document.getElementById('modal-subject-name').value;
-      const assignmentId = document.getElementById('modal-assignment-id').value;
-      const statusInput = document.getElementById('status-input').value;
-      const review = document.getElementById('review').value;
-      const feedbackFile = document.getElementById('feedback-file').files[0];
-
-      // Сначала сохраняем статус
-      const gradeRes = await fetch('/api/teacher/grade', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/x-www-form-urlencoded',
-          ...getAuthHeaders()
-        },
-        body: new URLSearchParams({
-          student_id: studentId,
-          subject_name: subjectName,
-          assignment_id: assignmentId,
-          status_input: statusInput,
-          review: review
-        })
-      });
-
-      if (!gradeRes.ok) {
-        if (gradeRes.status === 401 || gradeRes.status === 403) {
-          alert('Сессия истекла. Пожалуйста, войдите снова.');
-          localStorage.removeItem('teacher_token');
-          showLogin();
-          return;
-        }
-        const error = await gradeRes.json().catch(() => ({detail: 'Ошибка'}));
-        alert('Ошибка: ' + (error.detail || 'Неизвестная ошибка'));
-        return;
-      }
-
-      // Если статус "не зачтено" и есть файл — загружаем его
-      if (statusInput === 'не зачтено' && feedbackFile) {
-        const formData = new FormData();
-        formData.append('file', feedbackFile);
-        
-        const feedbackRes = await fetch(`/api/teacher/feedback/${assignmentId}/${studentId}`, {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: formData
-        });
-        
-        if (!feedbackRes.ok) {
-          alert('Файл комментария не сохранён: ' + (await feedbackRes.json()).detail);
-        }
-      }
-
-      alert('Статус сохранён');
-      bootstrap.Modal.getInstance(document.getElementById('gradeModal')).hide();
-      loadSubmissions();
-    });
-  </script>
-
-  <!-- Модальное окно: смена пароля -->
+  <!-- Modal: смена пароля -->
   <div class="modal fade" id="changePasswordModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -775,48 +305,389 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-          <button type="button" class="btn btn-primary" id="cp-submit-btn">Сохранить</button>
+          <button type="button" class="btn btn-success" id="cp-submit-btn">Сохранить</button>
         </div>
       </div>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    function showToast(msg, type = 'success') {
+      const el = document.getElementById('app-toast');
+      el.className = `toast align-items-center text-bg-${type} border-0`;
+      document.getElementById('app-toast-body').textContent = msg;
+      bootstrap.Toast.getOrCreateInstance(el, { delay: 3500 }).show();
+    }
+
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+
+    async function updateBadge() {
+      const token = localStorage.getItem('teacher_token');
+      if (!token) return;
+      try {
+        const res = await fetch('/api/badge', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!res.ok) return;
+        const { count } = await res.json();
+        if ('setAppBadge' in navigator) count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge();
+        document.title = count > 0 ? `(${count}) Кабинет преподавателя` : 'Кабинет преподавателя';
+      } catch {}
+    }
+    setInterval(updateBadge, 60000);
+
+    function deadlineBadge(deadlineStr) {
+      if (!deadlineStr) return '<span class="badge bg-secondary">Без дедлайна</span>';
+      const now = new Date(); now.setHours(0,0,0,0);
+      const due = new Date(deadlineStr);
+      const days = Math.round((due - now) / 86400000);
+      if (days < 0) return `<span class="badge bg-danger">Просрочено (${due.toLocaleDateString('ru-RU')})</span>`;
+      if (days <= 7) return `<span class="badge bg-warning text-dark">Дедлайн: ${due.toLocaleDateString('ru-RU')} (${days} дн.)</span>`;
+      return `<span class="badge bg-success">Дедлайн: ${due.toLocaleDateString('ru-RU')}</span>`;
+    }
+
+    function deadlineSortKey(deadlineStr) {
+      if (!deadlineStr) return Infinity;
+      const now = new Date(); now.setHours(0,0,0,0);
+      return Math.round((new Date(deadlineStr) - now) / 86400000);
+    }
+
+    function getAuthHeaders() {
+      const token = localStorage.getItem('teacher_token');
+      return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
+
+    function showLogin() {
+      document.getElementById('app-navbar').style.display = 'none';
+      document.getElementById('login-section').style.display = 'flex';
+      document.getElementById('main-section').style.display = 'none';
+    }
+    function showMain() {
+      document.getElementById('app-navbar').style.display = 'flex';
+      document.getElementById('login-section').style.display = 'none';
+      document.getElementById('main-section').style.display = 'block';
+    }
+
+    window.addEventListener('load', () => {
+      const token = localStorage.getItem('teacher_token');
+      const name = localStorage.getItem('teacher_name');
+      if (token && name) {
+        document.getElementById('teacher-name-nav').textContent = name;
+        loadSubmissions();
+        showMain();
+        updateBadge();
+      } else {
+        showLogin();
+      }
+    });
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type=submit]');
+      btn.disabled = true;
+      const errEl = document.getElementById('login-error');
+      errEl.classList.add('d-none');
+      const teacherId = document.getElementById('teacher-id').value.trim();
+      const password = document.getElementById('password').value.trim();
+      try {
+        const res = await fetch('/api/teacher/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `teacher_id=${encodeURIComponent(teacherId)}&password=${encodeURIComponent(password)}`
+        });
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({ detail: 'Ошибка входа' }));
+          throw new Error(error.detail || 'Неверные данные');
+        }
+        const data = await res.json();
+        const fullName = `${data.user.last_name} ${data.user.first_name}${data.user.patronymic ? ' ' + data.user.patronymic : ''}`;
+        localStorage.setItem('teacher_token', data.token);
+        localStorage.setItem('teacher_name', fullName);
+        document.getElementById('teacher-name-nav').textContent = fullName;
+        loadSubmissions();
+        showMain();
+        updateBadge();
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('d-none');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      localStorage.removeItem('teacher_token');
+      localStorage.removeItem('teacher_name');
+      showLogin();
+    });
+
+    async function loadSubmissions() {
+      try {
+        const res = await fetch('/api/teacher/assignments/me', { headers: getAuthHeaders() });
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('teacher_token'); localStorage.removeItem('teacher_name'); showLogin(); return;
+        }
+        if (!res.ok) throw new Error('Ошибка загрузки работ');
+        const submissions = await res.json();
+        submissions.sort((a, b) => deadlineSortKey(a.deadline) - deadlineSortKey(b.deadline));
+        const tbody = document.getElementById('submissions');
+        tbody.innerHTML = '';
+
+        if (submissions.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-muted text-center">Нет работ для проверки</td></tr>';
+          return;
+        }
+
+        submissions.forEach(row => {
+          const statusClassMap = { submitted: 'status-submitted', in_review: 'status-in_review', approved: 'status-approved', rejected: 'status-rejected', resubmitted: 'status-rejected' };
+          const cls = statusClassMap[row.last_status] || 'status-submitted';
+          const statusBadge = row.last_status_label ? `<span class="status-badge ${cls}">${row.last_status_label}</span>` : '—';
+          const lastAction = row.last_action_at
+            ? new Date(row.last_action_at).toLocaleString('ru-RU')
+            : (row.submitted_at ? new Date(row.submitted_at).toLocaleString('ru-RU') + ' (отправлена)' : '—');
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.student_name}<br><small class="text-muted">${row.student_id}</small></td>
+            <td>${row.subject}</td>
+            <td>${row.title}<br>${deadlineBadge(row.deadline)}</td>
+            <td>${statusBadge}</td>
+            <td><small>${lastAction}</small></td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary view-files"
+                      data-assignment-id="${row.assignment_id}"
+                      data-student-id="${row.student_id}">
+                <i class="bi bi-paperclip"></i>
+              </button>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-success set-grade"
+                      data-student-id="${row.student_id}"
+                      data-subject-name="${row.subject}"
+                      data-assignment-id="${row.assignment_id}">
+                <i class="bi bi-pencil-square"></i>
+              </button>
+            </td>`;
+          tbody.appendChild(tr);
+        });
+
+        document.querySelectorAll('.view-files').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const b = e.currentTarget;
+            const res = await fetch(`/api/teacher/files/${b.dataset.assignmentId}/${b.dataset.studentId}`, { headers: getAuthHeaders() });
+            const files = await res.json();
+            const filesList = document.getElementById('files-list');
+            filesList.innerHTML = files.length === 0 ? '<p class="text-muted">Файлы не найдены</p>' : '';
+            files.forEach(f => {
+              const button = document.createElement('button');
+              button.className = 'btn btn-sm btn-outline-secondary w-100 mb-2';
+              button.innerHTML = `<i class="bi bi-paperclip me-1"></i>${f.name}`;
+              button.onclick = async () => {
+                try {
+                  const res = await fetch(`/download/${f.path}`, { headers: getAuthHeaders() });
+                  if (!res.ok) throw new Error('Ошибка скачивания');
+                  const blob = await res.blob();
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url; a.download = f.name;
+                  document.body.appendChild(a); a.click();
+                  window.URL.revokeObjectURL(url); a.remove();
+                } catch (err) { showToast('Не удалось скачать файл: ' + err.message, 'danger'); }
+              };
+              filesList.appendChild(button);
+            });
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
+          });
+        });
+
+        document.querySelectorAll('.set-grade').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const b = e.currentTarget;
+            document.getElementById('modal-student-id').value = b.dataset.studentId;
+            document.getElementById('modal-subject-name').value = b.dataset.subjectName;
+            document.getElementById('modal-assignment-id').value = b.dataset.assignmentId;
+            document.getElementById('review').value = '';
+            document.getElementById('feedback-file').value = '';
+            document.getElementById('feedback-file-block').style.display = 'none';
+            const statusSelect = document.getElementById('status-input');
+            statusSelect.onchange = () => {
+              document.getElementById('feedback-file-block').style.display = statusSelect.value === 'не зачтено' ? 'block' : 'none';
+              if (statusSelect.value !== 'не зачтено') document.getElementById('feedback-file').value = '';
+            };
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('gradeModal')).show();
+          });
+        });
+      } catch (err) {
+        console.error('Ошибка при загрузке работ:', err);
+        localStorage.removeItem('teacher_token'); showLogin();
+      }
+    }
+
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/teacher/history/me', { headers: getAuthHeaders() });
+        if (res.status === 401 || res.status === 403) { localStorage.removeItem('teacher_token'); localStorage.removeItem('teacher_name'); showLogin(); return; }
+        if (!res.ok) throw new Error('Ошибка загрузки истории');
+        const history = await res.json();
+        const tbody = document.getElementById('history-rows');
+        const emptyMsg = document.getElementById('history-empty');
+        tbody.innerHTML = '';
+        if (history.length === 0) { emptyMsg.style.display = 'block'; }
+        else {
+          emptyMsg.style.display = 'none';
+          history.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${item.student_name}<br><small class="text-muted">${item.student_id}</small></td>
+              <td>${item.subject}</td>
+              <td>${item.assignment_title}</td>
+              <td>
+                ${new Date(item.graded_at).toLocaleString('ru-RU')}
+                <br>
+                <button class="btn btn-sm btn-outline-primary mt-1 history-view-files"
+                        data-assignment-id="${item.assignment_id}"
+                        data-student-id="${item.student_id}">
+                  <i class="bi bi-paperclip me-1"></i>Файлы
+                </button>
+              </td>`;
+            tbody.appendChild(tr);
+          });
+          document.querySelectorAll('.history-view-files').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              const b = e.currentTarget;
+              const res = await fetch(`/api/teacher/files/${b.dataset.assignmentId}/${b.dataset.studentId}`, { headers: getAuthHeaders() });
+              const files = await res.json();
+              const filesList = document.getElementById('files-list');
+              filesList.innerHTML = files.length === 0 ? '<p class="text-muted">Файлы не найдены</p>' : '';
+              files.forEach(f => {
+                const button = document.createElement('button');
+                button.className = 'btn btn-sm btn-outline-secondary w-100 mb-2';
+                button.innerHTML = `<i class="bi bi-paperclip me-1"></i>${f.name}`;
+                button.onclick = async () => {
+                  const res = await fetch(`/download/${f.path}`, { headers: getAuthHeaders() });
+                  if (!res.ok) { showToast('Ошибка скачивания', 'danger'); return; }
+                  const blob = await res.blob();
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a'); a.href = url; a.download = f.name;
+                  document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); a.remove();
+                };
+                filesList.appendChild(button);
+              });
+              bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
+            });
+          });
+        }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('historyModal')).show();
+      } catch (err) {
+        showToast('Ошибка загрузки истории: ' + err.message, 'danger');
+      }
+    }
+
+    let progressData = [];
+    async function loadProgress(subjectId) {
+      const url = subjectId ? `/api/teacher/progress?subject_id=${subjectId}` : '/api/teacher/progress';
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (res.status === 401 || res.status === 403) { localStorage.removeItem('teacher_token'); localStorage.removeItem('teacher_name'); showLogin(); return; }
+      if (!res.ok) { showToast('Ошибка загрузки прогресса', 'danger'); return; }
+      const data = await res.json();
+      const filter = document.getElementById('progress-subject-filter');
+      if (filter.options.length === 1) {
+        data.subjects.forEach(s => {
+          const opt = document.createElement('option'); opt.value = s.id; opt.textContent = s.name; filter.appendChild(opt);
+        });
+      }
+      renderProgress(data.rows);
+    }
+
+    function renderProgress(rows) {
+      const tbody = document.getElementById('progress-rows');
+      const emptyMsg = document.getElementById('progress-empty');
+      tbody.innerHTML = '';
+      if (rows.length === 0) { emptyMsg.style.display = 'block'; return; }
+      emptyMsg.style.display = 'none';
+      const today = new Date(); today.setHours(0,0,0,0);
+      const STATUS_LABELS = { submitted: 'Отправлено', in_review: 'На рассмотрении', approved: 'Зачтено', rejected: 'Не зачтено', resubmitted: 'Повторно отправлено' };
+      rows.forEach(row => {
+        const isApproved = row.status === 'approved';
+        const isNotSubmitted = !row.status;
+        const isRejected = row.status === 'rejected';
+        const deadline = row.deadline ? new Date(row.deadline) : null;
+        const isOverdue = deadline && deadline < today && !isApproved;
+        let rowClass = '';
+        if (isApproved) rowClass = 'table-success';
+        else if (isOverdue && isNotSubmitted) rowClass = 'table-danger';
+        else if (isNotSubmitted || isRejected) rowClass = 'table-warning';
+        const deadlineStr = deadline ? deadline.toLocaleDateString('ru-RU') + (isOverdue ? ' ⚠️' : '') : '—';
+        const statusLabel = row.status ? STATUS_LABELS[row.status] || row.status : 'Не сдано';
+        const submittedAt = row.submitted_at ? new Date(row.submitted_at).toLocaleDateString('ru-RU') : '—';
+        const tr = document.createElement('tr');
+        if (rowClass) tr.className = rowClass;
+        tr.innerHTML = `
+          <td>${row.student_name}<br><small class="text-muted">${row.student_id}</small></td>
+          <td>${row.subject}</td>
+          <td>${row.assignment_title}</td>
+          <td>${deadlineStr}</td>
+          <td>${statusLabel}</td>
+          <td>${submittedAt}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('show-progress-btn').addEventListener('click', () => {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('progressModal')).show();
+      loadProgress('');
+    });
+    document.getElementById('progress-subject-filter').addEventListener('change', e => loadProgress(e.target.value));
+    document.getElementById('show-history-btn').addEventListener('click', loadHistory);
+
+    document.getElementById('grade-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const studentId = document.getElementById('modal-student-id').value;
+      const subjectName = document.getElementById('modal-subject-name').value;
+      const assignmentId = document.getElementById('modal-assignment-id').value;
+      const statusInput = document.getElementById('status-input').value;
+      const review = document.getElementById('review').value;
+      const feedbackFile = document.getElementById('feedback-file').files[0];
+
+      const gradeRes = await fetch('/api/teacher/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...getAuthHeaders() },
+        body: new URLSearchParams({ student_id: studentId, subject_name: subjectName, assignment_id: assignmentId, status_input: statusInput, review })
+      });
+      if (!gradeRes.ok) {
+        if (gradeRes.status === 401 || gradeRes.status === 403) { localStorage.removeItem('teacher_token'); showLogin(); return; }
+        const error = await gradeRes.json().catch(() => ({ detail: 'Ошибка' }));
+        showToast('Ошибка: ' + (error.detail || 'Неизвестная ошибка'), 'danger');
+        return;
+      }
+      if (statusInput === 'не зачтено' && feedbackFile) {
+        const formData = new FormData(); formData.append('file', feedbackFile);
+        const feedbackRes = await fetch(`/api/teacher/feedback/${assignmentId}/${studentId}`, { method: 'POST', headers: getAuthHeaders(), body: formData });
+        if (!feedbackRes.ok) showToast('Файл комментария не сохранён', 'warning');
+      }
+      showToast('Статус сохранён');
+      bootstrap.Modal.getInstance(document.getElementById('gradeModal')).hide();
+      loadSubmissions();
+    });
+
     document.getElementById('cp-submit-btn').addEventListener('click', async () => {
-      const alert = document.getElementById('change-password-alert');
+      const alertEl = document.getElementById('change-password-alert');
       const oldPwd = document.getElementById('cp-old').value;
       const newPwd = document.getElementById('cp-new').value;
       const confirm = document.getElementById('cp-confirm').value;
-
-      alert.className = 'alert d-none';
-
-      if (newPwd !== confirm) {
-        alert.className = 'alert alert-danger';
-        alert.textContent = 'Новые пароли не совпадают';
-        return;
-      }
-      if (newPwd.length < 8) {
-        alert.className = 'alert alert-danger';
-        alert.textContent = 'Пароль должен содержать минимум 8 символов';
-        return;
-      }
-
+      alertEl.className = 'alert d-none';
+      if (newPwd !== confirm) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Новые пароли не совпадают'; return; }
+      if (newPwd.length < 8) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Пароль должен содержать минимум 8 символов'; return; }
       const token = localStorage.getItem('teacher_token');
-      const body = new URLSearchParams({ old_password: oldPwd, new_password: newPwd });
       const res = await fetch('/api/change-password', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
+        body: new URLSearchParams({ old_password: oldPwd, new_password: newPwd })
       });
-
       if (res.ok) {
-        alert.className = 'alert alert-success';
-        alert.textContent = 'Пароль успешно изменён';
+        alertEl.className = 'alert alert-success'; alertEl.textContent = 'Пароль успешно изменён';
         document.getElementById('change-password-form').reset();
       } else {
-        const err = await res.json();
-        alert.className = 'alert alert-danger';
-        alert.textContent = err.detail || 'Ошибка при смене пароля';
+        const err = await res.json(); alertEl.className = 'alert alert-danger'; alertEl.textContent = err.detail || 'Ошибка при смене пароля';
       }
     });
 

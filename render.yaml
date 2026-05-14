@@ -10,9 +10,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.13.4
       - key: DATABASE_URL
-        fromDatabase:
-          name: student-cabinet-db
-          property: connectionString
+        sync: false
       - key: R2_ENDPOINT_URL
         sync: false
       - key: R2_ACCESS_KEY_ID
@@ -32,7 +30,3 @@ services:
       - key: SMTP_FROM
         sync: false
 
-databases:
-  - name: student-cabinet-db
-    region: frankfurt
-    plan: free

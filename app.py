@@ -872,6 +872,22 @@ async def admin_login(admin_id: str = Form(...), password: str = Form(...)):
         token = create_session(admin["id"], "admin")
         return {"token": token}
 
+@app.post("/api/admin/change-password")
+async def admin_change_password(
+    old_password: str = Form(...),
+    new_password: str = Form(...),
+    admin_id = Depends(require_admin)
+):
+    if len(new_password) < 8:
+        raise HTTPException(400, "Новый пароль должен содержать минимум 8 символов")
+    with get_db() as conn:
+        cur = conn.execute("SELECT password_hash FROM admins WHERE id = %s", (admin_id,))
+        row = cur.fetchone()
+        if not row or not verify_password(old_password, row["password_hash"]):
+            raise HTTPException(400, "Неверный текущий пароль")
+        conn.execute("UPDATE admins SET password_hash = %s WHERE id = %s", (hash_password(new_password), admin_id))
+    return {"ok": True}
+
 # --- Студенты ---
 
 @app.get("/api/admin/students")

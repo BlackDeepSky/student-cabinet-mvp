@@ -295,6 +295,8 @@ async def submit_work(
 
     if not files or all(f.filename == "" for f in files):
         raise HTTPException(400, "Не выбраны файлы")
+    if len([f for f in files if f.filename]) > 10:
+        raise HTTPException(400, "Максимум 10 файлов за одну отправку")
 
     with get_db() as conn:
         cur = conn.execute("""

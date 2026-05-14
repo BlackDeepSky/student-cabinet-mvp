@@ -429,9 +429,18 @@
                             actionBlock = '<p class="text-muted mb-0 mt-2" style="font-size:.875rem"><i class="bi bi-hourglass-split me-1"></i>Работа проверяется преподавателем</p>';
                         } else {
                             actionBlock = `
-                                <form class="submit-form d-flex align-items-center gap-2 mt-2 flex-wrap" data-assignment-id="${a.id}">
-                                    <input type="file" class="form-control form-control-sm" style="max-width:280px" multiple required>
-                                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-cloud-upload me-1"></i>Отправить</button>
+                                <form class="submit-form mt-2" data-assignment-id="${a.id}">
+                                    <input type="file" class="d-none file-input" multiple>
+                                    <div class="file-list mb-2"></div>
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm add-files-btn">
+                                            <i class="bi bi-paperclip me-1"></i>Добавить файлы
+                                        </button>
+                                        <span class="file-count text-muted" style="font-size:.85rem">0 / 10 файлов</span>
+                                        <button type="submit" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-cloud-upload me-1"></i>Отправить
+                                        </button>
+                                    </div>
                                 </form>`;
                         }
 
@@ -451,14 +460,58 @@
                         cont.appendChild(el);
                     }
 
+                    const MAX_FILES = 10;
+                    const formFileMaps = new Map();
+
+                    function renderFileList(form, files) {
+                        const list = form.querySelector('.file-list');
+                        const counter = form.querySelector('.file-count');
+                        counter.textContent = `${files.length} / ${MAX_FILES} файлов`;
+                        if (!files.length) { list.innerHTML = ''; return; }
+                        list.innerHTML = files.map((f, i) => `
+                            <div class="d-flex align-items-center gap-2 mb-1" style="font-size:.85rem">
+                                <i class="bi bi-file-earmark me-1 text-secondary"></i>
+                                <span class="text-truncate" style="max-width:240px" title="${f.name}">${f.name}</span>
+                                <span class="text-muted">(${(f.size/1024).toFixed(0)} КБ)</span>
+                                <button type="button" class="btn-close btn-sm remove-file-btn" style="font-size:.65rem" data-idx="${i}"></button>
+                            </div>`).join('');
+                        list.querySelectorAll('.remove-file-btn').forEach(btn => {
+                            btn.addEventListener('click', () => {
+                                const assignmentId = form.dataset.assignmentId;
+                                const arr = formFileMaps.get(assignmentId) || [];
+                                arr.splice(parseInt(btn.dataset.idx), 1);
+                                formFileMaps.set(assignmentId, arr);
+                                renderFileList(form, arr);
+                            });
+                        });
+                    }
+
                     document.querySelectorAll('.submit-form').forEach(form => {
+                        const assignmentId = form.dataset.assignmentId;
+                        formFileMaps.set(assignmentId, []);
+                        const fileInput = form.querySelector('.file-input');
+
+                        form.querySelector('.add-files-btn').addEventListener('click', () => fileInput.click());
+
+                        fileInput.addEventListener('change', () => {
+                            const existing = formFileMaps.get(assignmentId) || [];
+                            for (const f of fileInput.files) {
+                                const idx = existing.findIndex(e => e.name === f.name);
+                                if (idx !== -1) existing[idx] = f;
+                                else if (existing.length < MAX_FILES) existing.push(f);
+                                else { showToast(`Максимум ${MAX_FILES} файлов`, 'warning'); break; }
+                            }
+                            formFileMaps.set(assignmentId, existing);
+                            renderFileList(form, existing);
+                            fileInput.value = '';
+                        });
+
                         form.addEventListener('submit', async (e) => {
                             e.preventDefault();
                             const btn = e.target.querySelector('button[type=submit]');
+                            const files = formFileMaps.get(assignmentId) || [];
+                            if (!files.length) { showToast('Выберите файлы для отправки', 'warning'); return; }
                             btn.disabled = true;
-                            const assignmentId = e.target.dataset.assignmentId;
-                            const files = Array.from(e.target.querySelector('input[type="file"]').files);
-                            if (!files.length) { btn.disabled = false; return; }
                             const formData = new FormData();
                             files.forEach(f => formData.append('files', f));
                             try {

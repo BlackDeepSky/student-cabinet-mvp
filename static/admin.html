@@ -31,6 +31,7 @@
       gap: 8px;
     }
     .app-navbar .brand i { font-size: 1.3rem; }
+    .app-navbar .role-badge { background: rgba(255,255,255,.2); color: #fff; font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; letter-spacing: .06em; text-transform: uppercase; }
     .app-navbar .nav-actions { display: flex; gap: 8px; align-items: center; }
 
     .login-wrapper {
@@ -57,7 +58,7 @@
     }
     .login-card .login-icon i { color: #fff; font-size: 1.6rem; }
     .login-card h2 { text-align: center; font-size: 1.3rem; font-weight: 700; margin-bottom: .25rem; }
-    .login-card .login-sub { text-align: center; color: #6c757d; font-size: .9rem; margin-bottom: 1.5rem; }
+    .login-card .login-sub { text-align: center; color: var(--brand); font-size: 1rem; font-weight: 600; margin-bottom: 1.5rem; }
 
     .section-card {
       background: #fff;
@@ -79,10 +80,10 @@
     <a href="#" class="brand">
       <i class="bi bi-mortarboard-fill"></i>
       КабинетЗаочника
+      <span class="role-badge">Администратор</span>
     </a>
     <div class="nav-actions">
-      <span class="text-white-50" style="font-size:.85rem"><i class="bi bi-shield-lock me-1"></i>Администратор</span>
-      <button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#changeAdminPasswordModal">
+<button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#changeAdminPasswordModal">
         <i class="bi bi-key me-1"></i>Пароль
       </button>
       <button id="logout-btn" class="btn btn-sm btn-outline-light">

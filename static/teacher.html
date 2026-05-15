@@ -35,6 +35,7 @@
       gap: 8px;
     }
     .app-navbar .brand i { font-size: 1.3rem; }
+    .app-navbar .role-badge { background: rgba(255,255,255,.2); color: #fff; font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; letter-spacing: .06em; text-transform: uppercase; }
     .app-navbar .nav-actions { display: flex; gap: 8px; align-items: center; }
     .app-navbar .teacher-name { color: rgba(255,255,255,.85); font-size: .9rem; }
 
@@ -62,7 +63,7 @@
     }
     .login-card .login-icon i { color: #fff; font-size: 1.6rem; }
     .login-card h2 { text-align: center; font-size: 1.3rem; font-weight: 700; margin-bottom: .25rem; }
-    .login-card .login-sub { text-align: center; color: #6c757d; font-size: .9rem; margin-bottom: 1.5rem; }
+    .login-card .login-sub { text-align: center; color: var(--brand); font-size: 1rem; font-weight: 600; margin-bottom: 1.5rem; }
 
     .status-badge { font-size: .8em; padding: .2em .55em; border-radius: .25rem; margin-left: 6px; vertical-align: middle; font-weight: 500; }
     .status-submitted  { background: #e9ecef; color: #495057; }
@@ -88,6 +89,7 @@
     <a href="#" class="brand">
       <i class="bi bi-mortarboard-fill"></i>
       КабинетЗаочника
+      <span class="role-badge">Преподаватель</span>
     </a>
     <div class="nav-actions">
       <span class="teacher-name d-none d-sm-inline"><i class="bi bi-person-circle me-1"></i><span id="teacher-name-nav"></span></span>

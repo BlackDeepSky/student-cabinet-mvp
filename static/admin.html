@@ -170,9 +170,14 @@
           <div class="tab-pane fade show active" id="tab-students">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h6 class="mb-0 fw-bold">Студенты</h6>
-              <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addStudentModal">
-                <i class="bi bi-plus-lg me-1"></i>Добавить
-              </button>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" onclick="downloadCSV('/api/admin/export/students', 'students.csv')">
+                  <i class="bi bi-download me-1"></i>CSV
+                </button>
+                <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+                  <i class="bi bi-plus-lg me-1"></i>Добавить
+                </button>
+              </div>
             </div>
             <div id="temp-password-alert" class="alert alert-success d-none">
               Временный пароль: <strong id="temp-password-value"></strong> — сохраните его, он больше не будет показан.
@@ -237,9 +242,14 @@
           <div class="tab-pane fade" id="tab-assignments">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h6 class="mb-0 fw-bold">Задания</h6>
-              <button class="btn btn-success btn-sm" id="open-add-assignment-btn">
-                <i class="bi bi-plus-lg me-1"></i>Добавить
-              </button>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" onclick="downloadCSV('/api/admin/export/grades', 'grades.csv')">
+                  <i class="bi bi-download me-1"></i>Успеваемость CSV
+                </button>
+                <button class="btn btn-success btn-sm" id="open-add-assignment-btn">
+                  <i class="bi bi-plus-lg me-1"></i>Добавить
+                </button>
+              </div>
             </div>
             <div class="table-responsive">
               <table class="table table-hover align-middle">
@@ -565,6 +575,17 @@
       document.getElementById('main-section').style.display = '';
       document.getElementById('app-navbar').style.display = 'flex';
       loadAll();
+    }
+
+    async function downloadCSV(url, filename) {
+      const res = await fetch(url, { headers: authHeaders() });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
     }
 
     async function loadStats() {

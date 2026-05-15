@@ -3,6 +3,8 @@
 Backend на FastAPI + PostgreSQL + Cloudflare R2
 """
 
+import csv
+import io
 import os
 import re
 import secrets
@@ -914,6 +916,50 @@ async def admin_stats(admin_id = Depends(require_admin)):
             ) t
         """).fetchone()[0]
     return {"students": students, "teachers": teachers, "pending": pending, "overdue": overdue}
+
+@app.get("/api/admin/export/students")
+async def admin_export_students(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT student_id, last_name, first_name, patronymic, group_name, email
+            FROM students ORDER BY group_name, last_name, first_name
+        """).fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["ID", "Фамилия", "Имя", "Отчество", "Группа", "Email"])
+    for r in rows:
+        w.writerow([r[0], r[1], r[2], r[3] or "", r[4] or "", r[5] or ""])
+    buf.seek(0)
+    return StreamingResponse(iter([buf.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=students.csv"})
+
+@app.get("/api/admin/export/grades")
+async def admin_export_grades(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT st.student_id, st.last_name, st.first_name, st.group_name,
+                   subj.name AS subject, a.title, a.deadline,
+                   COALESCE(sub.status, 'не сдано') AS status,
+                   sub.submitted_at
+            FROM student_subjects ss
+            JOIN students st ON st.id = ss.student_id
+            JOIN subjects subj ON subj.id = ss.subject_id
+            JOIN assignments a ON a.subject_id = ss.subject_id
+            LEFT JOIN submissions sub ON sub.student_id = ss.student_id AND sub.assignment_id = a.id
+            ORDER BY st.group_name, st.last_name, subj.name, a.title
+        """).fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["ID студента", "Фамилия", "Имя", "Группа", "Предмет", "Задание", "Дедлайн", "Статус", "Дата сдачи"])
+    for r in rows:
+        deadline = r[6].strftime("%d.%m.%Y") if r[6] else ""
+        submitted = r[8].strftime("%d.%m.%Y %H:%M") if r[8] else ""
+        w.writerow([r[0], r[1], r[2], r[3] or "", r[4], r[5], deadline, r[7], submitted])
+    buf.seek(0)
+    return StreamingResponse(iter([buf.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=grades.csv"})
 
 @app.get("/api/admin/students")
 async def admin_list_students(admin_id = Depends(require_admin)):

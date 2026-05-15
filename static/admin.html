@@ -246,6 +246,29 @@
     </div>
   </div>
 
+  <!-- Modal: редактировать студента -->
+  <div class="modal fade" id="editStudentModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Редактировать студента</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div id="edit-student-error" class="alert alert-danger d-none"></div>
+          <form id="edit-student-form">
+            <div class="mb-2"><input type="text" name="last_name" class="form-control" placeholder="Фамилия" required></div>
+            <div class="mb-2"><input type="text" name="first_name" class="form-control" placeholder="Имя" required></div>
+            <div class="mb-2"><input type="text" name="patronymic" class="form-control" placeholder="Отчество (необязательно)"></div>
+            <div class="mb-2"><input type="text" name="group_name" class="form-control" placeholder="Группа (необязательно)"></div>
+            <div class="mb-2"><input type="email" name="email" class="form-control" placeholder="Email (необязательно)"></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="button" class="btn btn-primary" id="edit-student-btn">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: добавить преподавателя -->
   <div class="modal fade" id="addTeacherModal" tabindex="-1">
     <div class="modal-dialog">
@@ -264,6 +287,28 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
           <button type="button" class="btn btn-success" id="add-teacher-btn">Добавить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: редактировать преподавателя -->
+  <div class="modal fade" id="editTeacherModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Редактировать преподавателя</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div id="edit-teacher-error" class="alert alert-danger d-none"></div>
+          <form id="edit-teacher-form">
+            <div class="mb-2"><input type="text" name="last_name" class="form-control" placeholder="Фамилия" required></div>
+            <div class="mb-2"><input type="text" name="first_name" class="form-control" placeholder="Имя" required></div>
+            <div class="mb-2"><input type="text" name="patronymic" class="form-control" placeholder="Отчество (необязательно)"></div>
+            <div class="mb-2"><input type="email" name="email" class="form-control" placeholder="Email (необязательно)"></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="button" class="btn btn-primary" id="edit-teacher-btn">Сохранить</button>
         </div>
       </div>
     </div>
@@ -461,6 +506,7 @@
           <td>${s.group_name || '—'}</td>
           <td>${s.email || '—'}</td>
           <td class="d-flex gap-1">
+            <button class="btn btn-outline-primary btn-sm" onclick="openEditStudent(${s.id})" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button class="btn btn-outline-secondary btn-sm" onclick="resetStudentPassword(${s.id})" title="Сбросить пароль"><i class="bi bi-key"></i></button>
             <button class="btn btn-outline-danger btn-sm" onclick="deleteStudent(${s.id})"><i class="bi bi-trash"></i></button>
           </td>
@@ -479,6 +525,35 @@
         form.reset();
         document.getElementById('temp-password-value').textContent = data.temp_password;
         document.getElementById('temp-password-alert').classList.remove('d-none');
+        loadStudents();
+      } else {
+        const e = await res.json(); err.textContent = e.detail || 'Ошибка'; err.classList.remove('d-none');
+      }
+    });
+
+    let editStudentId = null;
+    function openEditStudent(id) {
+      const s = allStudents.find(x => x.id === id);
+      if (!s) return;
+      editStudentId = id;
+      const form = document.getElementById('edit-student-form');
+      form.last_name.value = s.last_name;
+      form.first_name.value = s.first_name;
+      form.patronymic.value = s.patronymic || '';
+      form.group_name.value = s.group_name || '';
+      form.email.value = s.email || '';
+      document.getElementById('edit-student-error').classList.add('d-none');
+      new bootstrap.Modal(document.getElementById('editStudentModal')).show();
+    }
+
+    document.getElementById('edit-student-btn').addEventListener('click', async () => {
+      const form = document.getElementById('edit-student-form');
+      const err = document.getElementById('edit-student-error');
+      err.classList.add('d-none');
+      const body = new URLSearchParams(new FormData(form));
+      const res = await fetch(`/api/admin/students/${editStudentId}`, { method: 'PUT', headers: formHeaders(), body });
+      if (res.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('editStudentModal')).hide();
         loadStudents();
       } else {
         const e = await res.json(); err.textContent = e.detail || 'Ошибка'; err.classList.remove('d-none');
@@ -511,6 +586,7 @@
           <td>${t.last_name} ${t.first_name}${t.patronymic ? ' ' + t.patronymic : ''}</td>
           <td>${t.email || '—'}</td>
           <td class="d-flex gap-1">
+            <button class="btn btn-outline-primary btn-sm" onclick="openEditTeacher(${t.id})" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button class="btn btn-outline-secondary btn-sm" onclick="resetTeacherPassword(${t.id})" title="Сбросить пароль"><i class="bi bi-key"></i></button>
             <button class="btn btn-outline-danger btn-sm" onclick="deleteTeacher(${t.id})"><i class="bi bi-trash"></i></button>
           </td>
@@ -529,6 +605,34 @@
         form.reset();
         document.getElementById('temp-teacher-password-value').textContent = data.temp_password;
         document.getElementById('temp-teacher-password-alert').classList.remove('d-none');
+        loadTeachers();
+      } else {
+        const e = await res.json(); err.textContent = e.detail || 'Ошибка'; err.classList.remove('d-none');
+      }
+    });
+
+    let editTeacherId = null;
+    function openEditTeacher(id) {
+      const t = allTeachers.find(x => x.id === id);
+      if (!t) return;
+      editTeacherId = id;
+      const form = document.getElementById('edit-teacher-form');
+      form.last_name.value = t.last_name;
+      form.first_name.value = t.first_name;
+      form.patronymic.value = t.patronymic || '';
+      form.email.value = t.email || '';
+      document.getElementById('edit-teacher-error').classList.add('d-none');
+      new bootstrap.Modal(document.getElementById('editTeacherModal')).show();
+    }
+
+    document.getElementById('edit-teacher-btn').addEventListener('click', async () => {
+      const form = document.getElementById('edit-teacher-form');
+      const err = document.getElementById('edit-teacher-error');
+      err.classList.add('d-none');
+      const body = new URLSearchParams(new FormData(form));
+      const res = await fetch(`/api/admin/teachers/${editTeacherId}`, { method: 'PUT', headers: formHeaders(), body });
+      if (res.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('editTeacherModal')).hide();
         loadTeachers();
       } else {
         const e = await res.json(); err.textContent = e.detail || 'Ошибка'; err.classList.remove('d-none');

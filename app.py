@@ -922,6 +922,26 @@ async def admin_add_student(
             raise HTTPException(400, "Студент с таким ID уже существует")
     return {"ok": True, "temp_password": temp_password}
 
+@app.put("/api/admin/students/{student_db_id}")
+async def admin_edit_student(
+    student_db_id: int,
+    last_name: str = Form(...),
+    first_name: str = Form(...),
+    patronymic: str = Form(None),
+    group_name: str = Form(None),
+    email: str = Form(None),
+    admin_id = Depends(require_admin)
+):
+    with get_db() as conn:
+        cur = conn.execute("SELECT id FROM students WHERE id = %s", (student_db_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, "Студент не найден")
+        conn.execute("""
+            UPDATE students SET last_name=%s, first_name=%s, patronymic=%s, group_name=%s, email=%s
+            WHERE id=%s
+        """, (last_name, first_name, patronymic or None, group_name or None, email or None, student_db_id))
+    return {"ok": True}
+
 @app.post("/api/admin/students/{student_db_id}/reset-password")
 async def admin_reset_student_password(student_db_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
@@ -974,6 +994,25 @@ async def admin_add_teacher(
         except Exception:
             raise HTTPException(400, "Преподаватель с таким ID уже существует")
     return {"ok": True, "temp_password": temp_password}
+
+@app.put("/api/admin/teachers/{teacher_db_id}")
+async def admin_edit_teacher(
+    teacher_db_id: int,
+    last_name: str = Form(...),
+    first_name: str = Form(...),
+    patronymic: str = Form(None),
+    email: str = Form(None),
+    admin_id = Depends(require_admin)
+):
+    with get_db() as conn:
+        cur = conn.execute("SELECT id FROM teachers WHERE id = %s", (teacher_db_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, "Преподаватель не найден")
+        conn.execute("""
+            UPDATE teachers SET last_name=%s, first_name=%s, patronymic=%s, email=%s
+            WHERE id=%s
+        """, (last_name, first_name, patronymic or None, email or None, teacher_db_id))
+    return {"ok": True}
 
 @app.post("/api/admin/teachers/{teacher_db_id}/reset-password")
 async def admin_reset_teacher_password(teacher_db_id: int, admin_id = Depends(require_admin)):

@@ -1136,7 +1136,7 @@ async def admin_subject_members(subject_id: int, admin_id = Depends(require_admi
 async def admin_list_assignments(admin_id = Depends(require_admin)):
     with get_db() as conn:
         cur = conn.execute("""
-            SELECT a.id, a.title, a.description, a.deadline, s.name AS subject
+            SELECT a.id, a.subject_id, a.title, a.description, a.deadline, s.name AS subject
             FROM assignments a JOIN subjects s ON s.id = a.subject_id
             ORDER BY a.deadline DESC NULLS LAST
         """)
@@ -1160,6 +1160,24 @@ async def admin_add_assignment(
             INSERT INTO assignments (subject_id, title, description, deadline) VALUES (%s, %s, %s, %s) RETURNING id
         """, (subject_id, title, description or None, deadline or None))
         return {"ok": True, "id": cur.fetchone()[0]}
+
+@app.put("/api/admin/assignments/{assignment_id}")
+async def admin_edit_assignment(
+    assignment_id: int,
+    subject_id: int = Form(...),
+    title: str = Form(...),
+    description: str = Form(None),
+    deadline: str = Form(None),
+    admin_id = Depends(require_admin)
+):
+    with get_db() as conn:
+        cur = conn.execute("SELECT id FROM assignments WHERE id = %s", (assignment_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, "Задание не найдено")
+        conn.execute("""
+            UPDATE assignments SET subject_id=%s, title=%s, description=%s, deadline=%s WHERE id=%s
+        """, (subject_id, title, description or None, deadline or None, assignment_id))
+    return {"ok": True}
 
 @app.delete("/api/admin/assignments/{assignment_id}")
 async def admin_delete_assignment(assignment_id: int, admin_id = Depends(require_admin)):

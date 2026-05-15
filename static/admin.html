@@ -396,6 +396,32 @@
     </div>
   </div>
 
+  <!-- Modal: редактировать задание -->
+  <div class="modal fade" id="editAssignmentModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Редактировать задание</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div id="edit-assignment-error" class="alert alert-danger d-none"></div>
+          <form id="edit-assignment-form">
+            <div class="mb-2">
+              <select name="subject_id" id="edit-assignment-subject-select" class="form-select" required>
+                <option value="">Выберите предмет</option>
+              </select>
+            </div>
+            <div class="mb-2"><input type="text" name="title" class="form-control" placeholder="Название задания" required></div>
+            <div class="mb-2"><textarea name="description" class="form-control" placeholder="Описание (необязательно)" rows="2"></textarea></div>
+            <div class="mb-2"><input type="date" name="deadline" class="form-control"></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="button" class="btn btn-primary" id="edit-assignment-btn">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: смена пароля администратора -->
   <div class="modal fade" id="changeAdminPasswordModal" tabindex="-1">
     <div class="modal-dialog">
@@ -742,15 +768,19 @@
     }
 
     // ЗАДАНИЯ
+    let allAssignments = [];
     async function loadAssignments() {
       const res = await fetch('/api/admin/assignments', { headers: authHeaders() });
-      const assignments = await res.json();
-      document.getElementById('assignments-tbody').innerHTML = assignments.map(a => `
+      allAssignments = await res.json();
+      document.getElementById('assignments-tbody').innerHTML = allAssignments.map(a => `
         <tr>
           <td>${a.subject}</td>
           <td>${a.title}</td>
           <td>${a.deadline || '—'}</td>
-          <td><button class="btn btn-outline-danger btn-sm" onclick="deleteAssignment(${a.id})"><i class="bi bi-trash"></i></button></td>
+          <td class="d-flex gap-1">
+            <button class="btn btn-outline-primary btn-sm" onclick="openEditAssignment(${a.id})" title="Редактировать"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-outline-danger btn-sm" onclick="deleteAssignment(${a.id})"><i class="bi bi-trash"></i></button>
+          </td>
         </tr>`).join('');
     }
 
@@ -766,6 +796,36 @@
       const res = await fetch('/api/admin/assignments', { method: 'POST', headers: formHeaders(), body });
       if (res.ok) {
         bootstrap.Modal.getInstance(document.getElementById('addAssignmentModal')).hide(); form.reset(); loadAssignments();
+      } else {
+        const e = await res.json(); err.textContent = e.detail || 'Ошибка'; err.classList.remove('d-none');
+      }
+    });
+
+    let editAssignmentId = null;
+    function openEditAssignment(id) {
+      const a = allAssignments.find(x => x.id === id);
+      if (!a) return;
+      editAssignmentId = id;
+      const form = document.getElementById('edit-assignment-form');
+      const select = document.getElementById('edit-assignment-subject-select');
+      select.innerHTML = document.getElementById('assignment-subject-select').innerHTML;
+      select.value = a.subject_id;
+      form.title.value = a.title;
+      form.description.value = a.description || '';
+      form.deadline.value = a.deadline || '';
+      document.getElementById('edit-assignment-error').classList.add('d-none');
+      new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
+    }
+
+    document.getElementById('edit-assignment-btn').addEventListener('click', async () => {
+      const form = document.getElementById('edit-assignment-form');
+      const err = document.getElementById('edit-assignment-error');
+      err.classList.add('d-none');
+      const body = new URLSearchParams(new FormData(form));
+      const res = await fetch(`/api/admin/assignments/${editAssignmentId}`, { method: 'PUT', headers: formHeaders(), body });
+      if (res.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('editAssignmentModal')).hide();
+        loadAssignments();
       } else {
         const e = await res.json(); err.textContent = e.detail || 'Ошибка'; err.classList.remove('d-none');
       }

@@ -140,6 +140,10 @@
             <div id="temp-password-alert" class="alert alert-success d-none">
               Временный пароль: <strong id="temp-password-value"></strong> — сохраните его, он больше не будет показан.
             </div>
+            <div class="row g-2 mb-3">
+              <div class="col"><input type="text" id="student-search" class="form-control form-control-sm" placeholder="Поиск по имени или ID..."></div>
+              <div class="col-auto"><select id="student-group-filter" class="form-select form-select-sm"><option value="">Все группы</option></select></div>
+            </div>
             <div class="table-responsive">
               <table class="table table-hover align-middle">
                 <thead class="table-light">
@@ -160,6 +164,9 @@
             </div>
             <div id="temp-teacher-password-alert" class="alert alert-success d-none">
               Временный пароль: <strong id="temp-teacher-password-value"></strong> — сохраните его, он больше не будет показан.
+            </div>
+            <div class="mb-3">
+              <input type="text" id="teacher-search" class="form-control form-control-sm" placeholder="Поиск по имени или ID...">
             </div>
             <div class="table-responsive">
               <table class="table table-hover align-middle">
@@ -528,10 +535,8 @@
     }
 
     // СТУДЕНТЫ
-    async function loadStudents() {
-      const res = await fetch('/api/admin/students', { headers: authHeaders() });
-      allStudents = await res.json();
-      document.getElementById('students-tbody').innerHTML = allStudents.map(s => `
+    function renderStudents(data) {
+      document.getElementById('students-tbody').innerHTML = data.length ? data.map(s => `
         <tr>
           <td><code>${s.student_id}</code></td>
           <td>${s.last_name} ${s.first_name}${s.patronymic ? ' ' + s.patronymic : ''}</td>
@@ -542,8 +547,33 @@
             <button class="btn btn-outline-secondary btn-sm" onclick="resetStudentPassword(${s.id})" title="Сбросить пароль"><i class="bi bi-key"></i></button>
             <button class="btn btn-outline-danger btn-sm" onclick="deleteStudent(${s.id})"><i class="bi bi-trash"></i></button>
           </td>
-        </tr>`).join('');
+        </tr>`).join('') : '<tr><td colspan="5" class="text-center text-muted">Ничего не найдено</td></tr>';
     }
+
+    function applyStudentFilter() {
+      const q = document.getElementById('student-search').value.toLowerCase().trim();
+      const group = document.getElementById('student-group-filter').value;
+      renderStudents(allStudents.filter(s => {
+        const matchQ = !q || s.student_id.toLowerCase().includes(q) ||
+          s.last_name.toLowerCase().includes(q) || s.first_name.toLowerCase().includes(q) ||
+          (s.patronymic && s.patronymic.toLowerCase().includes(q));
+        return matchQ && (!group || s.group_name === group);
+      }));
+    }
+
+    async function loadStudents() {
+      const res = await fetch('/api/admin/students', { headers: authHeaders() });
+      allStudents = await res.json();
+      const groups = [...new Set(allStudents.map(s => s.group_name).filter(Boolean))].sort();
+      const gf = document.getElementById('student-group-filter');
+      const prev = gf.value;
+      gf.innerHTML = '<option value="">Все группы</option>' + groups.map(g => `<option value="${g}">${g}</option>`).join('');
+      gf.value = prev;
+      applyStudentFilter();
+    }
+
+    document.getElementById('student-search').addEventListener('input', applyStudentFilter);
+    document.getElementById('student-group-filter').addEventListener('change', applyStudentFilter);
 
     document.getElementById('add-student-btn').addEventListener('click', async () => {
       const form = document.getElementById('add-student-form');
@@ -609,10 +639,8 @@
     }
 
     // ПРЕПОДАВАТЕЛИ
-    async function loadTeachers() {
-      const res = await fetch('/api/admin/teachers', { headers: authHeaders() });
-      allTeachers = await res.json();
-      document.getElementById('teachers-tbody').innerHTML = allTeachers.map(t => `
+    function renderTeachers(data) {
+      document.getElementById('teachers-tbody').innerHTML = data.length ? data.map(t => `
         <tr>
           <td><code>${t.teacher_id}</code></td>
           <td>${t.last_name} ${t.first_name}${t.patronymic ? ' ' + t.patronymic : ''}</td>
@@ -622,8 +650,23 @@
             <button class="btn btn-outline-secondary btn-sm" onclick="resetTeacherPassword(${t.id})" title="Сбросить пароль"><i class="bi bi-key"></i></button>
             <button class="btn btn-outline-danger btn-sm" onclick="deleteTeacher(${t.id})"><i class="bi bi-trash"></i></button>
           </td>
-        </tr>`).join('');
+        </tr>`).join('') : '<tr><td colspan="4" class="text-center text-muted">Ничего не найдено</td></tr>';
     }
+
+    function applyTeacherFilter() {
+      const q = document.getElementById('teacher-search').value.toLowerCase().trim();
+      renderTeachers(allTeachers.filter(t => !q ||
+        t.teacher_id.toLowerCase().includes(q) || t.last_name.toLowerCase().includes(q) ||
+        t.first_name.toLowerCase().includes(q) || (t.patronymic && t.patronymic.toLowerCase().includes(q))));
+    }
+
+    async function loadTeachers() {
+      const res = await fetch('/api/admin/teachers', { headers: authHeaders() });
+      allTeachers = await res.json();
+      applyTeacherFilter();
+    }
+
+    document.getElementById('teacher-search').addEventListener('input', applyTeacherFilter);
 
     document.getElementById('add-teacher-btn').addEventListener('click', async () => {
       const form = document.getElementById('add-teacher-form');

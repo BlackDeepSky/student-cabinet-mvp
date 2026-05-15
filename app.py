@@ -922,6 +922,17 @@ async def admin_add_student(
             raise HTTPException(400, "Студент с таким ID уже существует")
     return {"ok": True, "temp_password": temp_password}
 
+@app.post("/api/admin/students/{student_db_id}/reset-password")
+async def admin_reset_student_password(student_db_id: int, admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("SELECT id FROM students WHERE id = %s", (student_db_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, "Студент не найден")
+        temp_password = secrets.token_hex(4)
+        conn.execute("UPDATE students SET password_hash = %s WHERE id = %s",
+                     (hash_password(temp_password), student_db_id))
+    return {"ok": True, "temp_password": temp_password}
+
 @app.delete("/api/admin/students/{student_db_id}")
 async def admin_delete_student(student_db_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:

@@ -496,7 +496,10 @@
           <td><code>${t.teacher_id}</code></td>
           <td>${t.last_name} ${t.first_name}${t.patronymic ? ' ' + t.patronymic : ''}</td>
           <td>${t.email || '—'}</td>
-          <td><button class="btn btn-outline-danger btn-sm" onclick="deleteTeacher(${t.id})"><i class="bi bi-trash"></i></button></td>
+          <td class="d-flex gap-1">
+            <button class="btn btn-outline-secondary btn-sm" onclick="resetTeacherPassword(${t.id})" title="Сбросить пароль"><i class="bi bi-key"></i></button>
+            <button class="btn btn-outline-danger btn-sm" onclick="deleteTeacher(${t.id})"><i class="bi bi-trash"></i></button>
+          </td>
         </tr>`).join('');
     }
 
@@ -517,6 +520,16 @@
         const e = await res.json(); err.textContent = e.detail || 'Ошибка'; err.classList.remove('d-none');
       }
     });
+
+    async function resetTeacherPassword(id) {
+      if (!confirm('Сбросить пароль преподавателя?')) return;
+      const res = await fetch(`/api/admin/teachers/${id}/reset-password`, { method: 'POST', headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        document.getElementById('temp-teacher-password-value').textContent = data.temp_password;
+        document.getElementById('temp-teacher-password-alert').classList.remove('d-none');
+      }
+    }
 
     async function deleteTeacher(id) {
       if (!confirm('Удалить преподавателя?')) return;

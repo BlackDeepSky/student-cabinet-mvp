@@ -118,6 +118,43 @@
   <!-- Main -->
   <div id="main-section" style="display:none">
     <div class="container py-4">
+
+      <!-- Дашборд -->
+      <div class="row g-3 mb-4" id="stats-row">
+        <div class="col-6 col-md-3">
+          <div class="card text-center border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+              <div class="fs-2 fw-bold text-primary" id="stat-students">—</div>
+              <div class="text-muted small">Студентов</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card text-center border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+              <div class="fs-2 fw-bold text-success" id="stat-teachers">—</div>
+              <div class="text-muted small">Преподавателей</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card text-center border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+              <div class="fs-2 fw-bold text-warning" id="stat-pending">—</div>
+              <div class="text-muted small">На проверке</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card text-center border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+              <div class="fs-2 fw-bold text-danger" id="stat-overdue">—</div>
+              <div class="text-muted small">Просрочено</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-card">
         <!-- Вкладки -->
         <ul class="nav nav-tabs mb-4" id="adminTabs">
@@ -530,8 +567,18 @@
       loadAll();
     }
 
+    async function loadStats() {
+      const res = await fetch('/api/admin/stats', { headers: authHeaders() });
+      if (!res.ok) return;
+      const d = await res.json();
+      document.getElementById('stat-students').textContent = d.students;
+      document.getElementById('stat-teachers').textContent = d.teachers;
+      document.getElementById('stat-pending').textContent = d.pending;
+      document.getElementById('stat-overdue').textContent = d.overdue;
+    }
+
     async function loadAll() {
-      await Promise.all([loadStudents(), loadTeachers(), loadSubjects(), loadAssignments()]);
+      await Promise.all([loadStudents(), loadTeachers(), loadSubjects(), loadAssignments(), loadStats()]);
     }
 
     // СТУДЕНТЫ
@@ -587,7 +634,7 @@
         form.reset();
         document.getElementById('temp-password-value').textContent = data.temp_password;
         document.getElementById('temp-password-alert').classList.remove('d-none');
-        loadStudents();
+        loadStudents(); loadStats();
       } else {
         const e = await res.json(); err.textContent = e.detail || 'Ошибка'; err.classList.remove('d-none');
       }
@@ -635,7 +682,7 @@
     async function deleteStudent(id) {
       if (!confirm('Удалить студента? Все его работы также будут удалены.')) return;
       await fetch(`/api/admin/students/${id}`, { method: 'DELETE', headers: authHeaders() });
-      loadStudents();
+      loadStudents(); loadStats();
     }
 
     // ПРЕПОДАВАТЕЛИ
@@ -680,7 +727,7 @@
         form.reset();
         document.getElementById('temp-teacher-password-value').textContent = data.temp_password;
         document.getElementById('temp-teacher-password-alert').classList.remove('d-none');
-        loadTeachers();
+        loadTeachers(); loadStats();
       } else {
         const e = await res.json(); err.textContent = e.detail || 'Ошибка'; err.classList.remove('d-none');
       }
@@ -727,7 +774,7 @@
     async function deleteTeacher(id) {
       if (!confirm('Удалить преподавателя?')) return;
       await fetch(`/api/admin/teachers/${id}`, { method: 'DELETE', headers: authHeaders() });
-      loadTeachers();
+      loadTeachers(); loadStats();
     }
 
     // ПРЕДМЕТЫ

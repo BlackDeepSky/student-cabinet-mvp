@@ -890,6 +890,31 @@ async def admin_change_password(
 
 # --- Студенты ---
 
+@app.get("/api/admin/stats")
+async def admin_stats(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        students = conn.execute("SELECT COUNT(*) FROM students").fetchone()[0]
+        teachers = conn.execute("SELECT COUNT(*) FROM teachers").fetchone()[0]
+        pending = conn.execute("""
+            SELECT COUNT(*) FROM submissions
+            WHERE status IN ('submitted', 'in_review', 'resubmitted')
+        """).fetchone()[0]
+        overdue = conn.execute("""
+            SELECT COUNT(*) FROM (
+                SELECT ss.student_id, a.id
+                FROM student_subjects ss
+                JOIN assignments a ON a.subject_id = ss.subject_id
+                WHERE a.deadline < CURRENT_DATE
+                AND NOT EXISTS (
+                    SELECT 1 FROM submissions sub
+                    WHERE sub.student_id = ss.student_id
+                    AND sub.assignment_id = a.id
+                    AND sub.status = 'approved'
+                )
+            ) t
+        """).fetchone()[0]
+    return {"students": students, "teachers": teachers, "pending": pending, "overdue": overdue}
+
 @app.get("/api/admin/students")
 async def admin_list_students(admin_id = Depends(require_admin)):
     with get_db() as conn:

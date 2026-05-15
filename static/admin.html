@@ -355,10 +355,16 @@
             </div>
             <div class="col-md-6">
               <h6 class="fw-bold">Студенты</h6>
-              <ul id="members-students-list" class="list-group mb-2"></ul>
+              <ul id="members-students-list" class="list-group mb-2" style="max-height:160px;overflow-y:auto"></ul>
+              <div class="d-flex gap-2 mb-2">
+                <select id="enroll-group-select" class="form-select form-select-sm">
+                  <option value="">Записать группу...</option>
+                </select>
+                <button class="btn btn-outline-primary btn-sm text-nowrap" id="enroll-group-btn">Записать</button>
+              </div>
               <div class="d-flex gap-2">
                 <select id="enroll-student-select" class="form-select form-select-sm"></select>
-                <button class="btn btn-outline-success btn-sm text-nowrap" id="enroll-student-btn">+ Записать</button>
+                <button class="btn btn-outline-success btn-sm text-nowrap" id="enroll-student-btn">+ Одного</button>
               </div>
             </div>
           </div>
@@ -724,6 +730,8 @@
       document.getElementById('members-subject-name').textContent = subjectName;
       document.getElementById('assign-teacher-select').innerHTML = allTeachers.map(t => `<option value="${t.id}">${t.last_name} ${t.first_name} (${t.teacher_id})</option>`).join('');
       document.getElementById('enroll-student-select').innerHTML = allStudents.map(s => `<option value="${s.id}">${s.last_name} ${s.first_name} (${s.student_id})</option>`).join('');
+      const groups = [...new Set(allStudents.map(s => s.group_name).filter(Boolean))].sort();
+      document.getElementById('enroll-group-select').innerHTML = '<option value="">Записать группу...</option>' + groups.map(g => `<option value="${g}">${g}</option>`).join('');
       await refreshMembers(subjectId);
       new bootstrap.Modal(document.getElementById('membersModal')).show();
     }
@@ -748,6 +756,19 @@
       if (!teacherId) return;
       await fetch(`/api/admin/subjects/${currentSubjectId}/teachers`, { method: 'POST', headers: formHeaders(), body: new URLSearchParams({ teacher_id: teacherId }) });
       refreshMembers(currentSubjectId); loadSubjects();
+    });
+
+    document.getElementById('enroll-group-btn').addEventListener('click', async () => {
+      const group = document.getElementById('enroll-group-select').value;
+      if (!group) return;
+      const ids = allStudents.filter(s => s.group_name === group).map(s => s.id);
+      if (!ids.length) return;
+      await fetch(`/api/admin/subjects/${currentSubjectId}/students/bulk`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_ids: ids })
+      });
+      refreshMembers(currentSubjectId);
     });
 
     document.getElementById('enroll-student-btn').addEventListener('click', async () => {

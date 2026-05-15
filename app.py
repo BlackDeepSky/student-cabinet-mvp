@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from datetime import timedelta, datetime
 from pathlib import Path
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Header, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Header, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
@@ -1106,6 +1106,20 @@ async def admin_enroll_student(
             ON CONFLICT DO NOTHING
         """, (student_id, subject_id))
     return {"ok": True}
+
+@app.post("/api/admin/subjects/{subject_id}/students/bulk")
+async def admin_bulk_enroll_students(subject_id: int, request: Request, admin_id = Depends(require_admin)):
+    body = await request.json()
+    student_ids = body.get("student_ids", [])
+    if not student_ids:
+        raise HTTPException(400, "Список студентов пуст")
+    with get_db() as conn:
+        for sid in student_ids:
+            conn.execute("""
+                INSERT INTO student_subjects (student_id, subject_id) VALUES (%s, %s)
+                ON CONFLICT DO NOTHING
+            """, (sid, subject_id))
+    return {"ok": True, "enrolled": len(student_ids)}
 
 @app.delete("/api/admin/subjects/{subject_id}/students/{student_id}")
 async def admin_unenroll_student(subject_id: int, student_id: int, admin_id = Depends(require_admin)):

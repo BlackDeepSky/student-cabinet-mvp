@@ -310,6 +310,14 @@ async def submit_work(
         assignment_row = cur.fetchone()
         if not assignment_row:
             raise HTTPException(404, "Задание не найдено")
+
+        cur = conn.execute("""
+            SELECT 1 FROM grades g
+            JOIN assignments a ON a.subject_id = g.subject_id
+            WHERE a.id = %s AND g.student_id = %s
+        """, (assignment_id, user_id))
+        if cur.fetchone():
+            raise HTTPException(409, "Оценка по предмету уже выставлена. Повторная сдача недоступна.")
         assignment_title = assignment_row["title"]
         subject_name = assignment_row["subject"]
 
@@ -447,6 +455,13 @@ async def get_my_assignments(session = Depends(require_auth)):
             """, submission_ids)
             has_feedback = {row[0] for row in cur.fetchall()}
 
+        cur = conn.execute("""
+            SELECT subject_id, status
+            FROM grades
+            WHERE student_id = %s
+        """, (user_id,))
+        grade_map = {row["subject_id"]: row["status"] for row in cur.fetchall()}
+
         STATUS_LABELS = {
             "submitted": "Отправлено",
             "in_review": "На рассмотрении",
@@ -468,7 +483,9 @@ async def get_my_assignments(session = Depends(require_auth)):
                 "submitted_at": submission_map[a["id"]]["submitted_at"],
                 "review": submission_map[a["id"]]["review"],
                 "submission_id": submission_map[a["id"]]["submission_id"],
-                "has_teacher_feedback": submission_map[a["id"]]["submission_id"] in has_feedback
+                "has_teacher_feedback": submission_map[a["id"]]["submission_id"] in has_feedback,
+                "final_grade_blocked": a["subject_id"] in grade_map,
+                "final_grade_status": grade_map.get(a["subject_id"])
             }
             for a in assignments_raw
         ]
@@ -517,6 +534,8 @@ async def change_password(
     session = Depends(require_auth)
 ):
     user_id, user_type = session
+    if user_type == "admin":
+        raise HTTPException(403, "Используйте /api/admin/change-password")
     if len(new_password) < 8:
         raise HTTPException(400, "Новый пароль должен содержать минимум 8 символов")
 
@@ -1334,4 +1353,36 @@ async def get_teacher_progress(subject_id: Optional[int] = None, session = Depen
 async def download_file(path: str, session = Depends(require_auth)):
     if ".." in path or path.startswith("/"):
         raise HTTPException(400, "Некорректный путь")
+
+    user_id, user_type = session
+
+    if user_type != "admin":
+        with get_db() as conn:
+            if user_type == "student":
+                cur = conn.execute("""
+                    SELECT 1 FROM submission_files sf
+                    JOIN submissions sub ON sf.submission_id = sub.id
+                    WHERE sf.file_path = %s AND sub.student_id = %s
+                    UNION ALL
+                    SELECT 1 FROM teacher_feedback_files tff
+                    JOIN submissions sub ON tff.submission_id = sub.id
+                    WHERE tff.file_path = %s AND sub.student_id = %s
+                """, (path, user_id, path, user_id))
+            else:  # teacher
+                cur = conn.execute("""
+                    SELECT 1 FROM submission_files sf
+                    JOIN submissions sub ON sf.submission_id = sub.id
+                    JOIN assignments a ON sub.assignment_id = a.id
+                    JOIN subject_teachers st ON a.subject_id = st.subject_id
+                    WHERE sf.file_path = %s AND st.teacher_id = %s
+                    UNION ALL
+                    SELECT 1 FROM teacher_feedback_files tff
+                    JOIN submissions sub ON tff.submission_id = sub.id
+                    JOIN assignments a ON sub.assignment_id = a.id
+                    JOIN subject_teachers st ON a.subject_id = st.subject_id
+                    WHERE tff.file_path = %s AND st.teacher_id = %s
+                """, (path, user_id, path, user_id))
+            if not cur.fetchone():
+                raise HTTPException(403, "Доступ запрещён")
+
     return _r2_stream(path, os.path.basename(path))

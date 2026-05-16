@@ -472,9 +472,10 @@
                         const classMap = { submitted: 'status-submitted', in_review: 'status-in_review', approved: 'status-approved', rejected: 'status-rejected', resubmitted: 'status-rejected', notebook_sent: 'status-in_review' };
                         let statusBadge = '';
                         if (a.status_label && a.status_label !== '—') {
-                            statusBadge = `<span class="status-badge ${classMap[a.status] || 'status-submitted'}">${a.status_label}${dateStr}</span>`;
+                            const displayLabel = (isNotebook && a.status === 'in_review') ? 'Получена преподавателем' : a.status_label;
+                            statusBadge = `<span class="status-badge ${classMap[a.status] || 'status-submitted'}">${displayLabel}${dateStr}</span>`;
                         } else {
-                            statusBadge = `<span class="status-badge status-submitted">Не отправлено</span>`;
+                            statusBadge = `<span class="status-badge status-submitted">${isNotebook ? 'Нет в кабинете' : 'Не отправлено'}</span>`;
                         }
 
                         let reviewBlock = '';
@@ -489,14 +490,13 @@
 
                         const isNotebook = a.submission_type === 'notebook';
                         let actionBlock = '';
-                        if (a.final_grade_blocked) {
-                            const statusText = a.final_grade_status ? `Оценка выставлена: ${a.final_grade_status}.` : 'Оценка по предмету уже выставлена.';
-                            actionBlock = `<p class="text-muted mb-0 mt-2" style="font-size:.875rem">${statusText} Повторная сдача недоступна.</p>`;
-                        } else if (a.status === 'approved') {
-                            // nothing
-                        } else if (isNotebook) {
-                            if (a.status === 'notebook_sent') {
-                                actionBlock = '<p class="text-muted mb-0 mt-2" style="font-size:.875rem"><i class="bi bi-envelope-check me-1"></i>Тетрадь отмечена как отправленная. Ожидайте проверки.</p>';
+                        if (isNotebook) {
+                            if (a.status === 'approved') {
+                                // зачтено — ничего не показываем
+                            } else if (a.status === 'in_review') {
+                                actionBlock = '<p class="text-muted mb-0 mt-2" style="font-size:.875rem"><i class="bi bi-envelope-check me-1"></i>Тетрадь получена преподавателем. Ожидайте результата.</p>';
+                            } else if (a.status === 'notebook_sent') {
+                                actionBlock = '<p class="text-muted mb-0 mt-2" style="font-size:.875rem"><i class="bi bi-envelope me-1"></i>Тетрадь отмечена как отправленная. Ожидайте получения.</p>';
                             } else {
                                 const btnLabel = a.status === 'rejected' ? 'Отметить повторную отправку' : 'Отметить как отправлено почтой';
                                 actionBlock = `
@@ -507,6 +507,11 @@
                                         </button>
                                     </div>`;
                             }
+                        } else if (a.final_grade_blocked) {
+                            const statusText = a.final_grade_status ? `Оценка выставлена: ${a.final_grade_status}.` : 'Оценка по предмету уже выставлена.';
+                            actionBlock = `<p class="text-muted mb-0 mt-2" style="font-size:.875rem">${statusText} Повторная сдача недоступна.</p>`;
+                        } else if (a.status === 'approved') {
+                            // nothing
                         } else if (a.status === 'in_review') {
                             actionBlock = '<p class="text-muted mb-0 mt-2" style="font-size:.875rem"><i class="bi bi-hourglass-split me-1"></i>Работа проверяется преподавателем</p>';
                         } else {

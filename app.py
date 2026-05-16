@@ -738,17 +738,23 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
 
         result = []
         for row in cur.fetchall():
+            stype = row["submission_type"] or "electronic"
+            last_status = row["last_status"]
+            if last_status is None and stype == "notebook":
+                status_label = "Нет в кабинете"
+            else:
+                status_label = STATUS_LABELS.get(last_status, "Не отмечено")
             result.append({
                 "assignment_id": row["assignment_id"],
                 "title": row["title"],
                 "deadline": row["deadline"],
-                "submission_type": row["submission_type"] or "electronic",
+                "submission_type": stype,
                 "subject": row["subject"],
                 "student_name": row["student_name"],
                 "student_id": row["student_id"],
                 "submitted_at": row["submitted_at"],
-                "last_status": row["last_status"],
-                "last_status_label": STATUS_LABELS.get(row["last_status"], "Не отмечено"),
+                "last_status": last_status,
+                "last_status_label": status_label,
                 "last_action_at": row["last_action_at"]
             })
         return result
@@ -861,12 +867,12 @@ async def set_grade(
         is_notebook = (assignment_row["submission_type"] == "notebook") if assignment_row else False
 
         VALID_STATUSES = {"зачёт", "сдано", "не зачтено", "не допущен", "не сдано",
-                          "принят на рассмотрение", "нет в кабинете"}
+                          "принят на рассмотрение", "получена"}
         if status_input not in VALID_STATUSES:
             raise HTTPException(400, "Недопустимый статус")
 
-        if status_input == "нет в кабинете" and not is_notebook:
-            raise HTTPException(400, "Статус «нет в кабинете» применим только к тетрадным заданиям")
+        if status_input == "получена" and not is_notebook:
+            raise HTTPException(400, "Статус «получена» применим только к тетрадным заданиям")
 
         if status_input == "не зачтено":
             cur = conn.execute("""
@@ -897,7 +903,7 @@ async def set_grade(
             "не зачтено": "rejected",
             "не допущен": "rejected",
             "не сдано": "rejected",
-            "нет в кабинете": "rejected",
+            "получена": "in_review",
             "принят на рассмотрение": "in_review"
         }
         db_status = status_mapping.get(status_input, "submitted")
@@ -907,8 +913,8 @@ async def set_grade(
             conn.execute("""
                 INSERT INTO submissions (student_id, assignment_id, status, submitted_at)
                 VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
-                ON CONFLICT (student_id, assignment_id) DO UPDATE SET status = %s
-            """, (student_id_int, assignment_id, db_status, db_status))
+                ON CONFLICT (student_id, assignment_id) DO UPDATE SET status = %s, review = %s
+            """, (student_id_int, assignment_id, db_status, db_status, review))
         else:
             conn.execute("""
                 UPDATE submissions
@@ -916,23 +922,19 @@ async def set_grade(
                 WHERE student_id = %s AND assignment_id = %s
             """, (db_status, review, student_id_int, assignment_id))
 
-        if is_notebook:
+        # "Получена" — только факт получения, итоговую оценку не выставляем
+        if status_input != "получена":
+            grade_value = 100 if status_input in ("зачёт", "сдано") else None
             conn.execute("""
-                UPDATE submissions SET review = %s
-                WHERE student_id = %s AND assignment_id = %s
-            """, (review, student_id_int, assignment_id))
-
-        grade_value = 100 if status_input in ("зачёт", "сдано") else None
-        conn.execute("""
-            INSERT INTO grades (student_id, subject_id, grade, status, review, graded_at)
-            VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (student_id, subject_id)
-            DO UPDATE SET
-                grade = EXCLUDED.grade,
-                status = EXCLUDED.status,
-                review = EXCLUDED.review,
-                graded_at = EXCLUDED.graded_at
-        """, (student_id_int, subject_id_int, grade_value, status_input, review))
+                INSERT INTO grades (student_id, subject_id, grade, status, review, graded_at)
+                VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (student_id, subject_id)
+                DO UPDATE SET
+                    grade = EXCLUDED.grade,
+                    status = EXCLUDED.status,
+                    review = EXCLUDED.review,
+                    graded_at = EXCLUDED.graded_at
+            """, (student_id_int, subject_id_int, grade_value, status_input, review))
 
     if student_email:
         STATUS_LABELS = {
@@ -941,7 +943,7 @@ async def set_grade(
             "не зачтено": "Не зачтено — требуется повторная сдача",
             "не допущен": "Не допущен",
             "не сдано": "Не зачтено",
-            "нет в кабинете": "Нет в кабинете — тетрадь не была отмечена как отправленная",
+            "получена": "Тетрадь получена преподавателем",
             "принят на рассмотрение": "Принято на рассмотрение",
         }
         status_label = STATUS_LABELS.get(status_input, status_input)

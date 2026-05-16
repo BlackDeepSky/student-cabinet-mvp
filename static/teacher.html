@@ -518,9 +518,9 @@
             const isNotebook = b.dataset.submissionType === 'notebook';
             const statusSelect = document.getElementById('status-input');
             statusSelect.innerHTML = isNotebook
-              ? `<option value="зачёт">Зачтено</option>
-                 <option value="не зачтено">Не зачтено</option>
-                 <option value="нет в кабинете">Нет в кабинете (не отмечено студентом)</option>`
+              ? `<option value="получена">Получена</option>
+                 <option value="зачёт">Зачтено</option>
+                 <option value="не зачтено">Не зачтено</option>`
               : `<option value="принят на рассмотрение">Принят на рассмотрение</option>
                  <option value="зачёт">Зачёт</option>
                  <option value="не зачтено">Не зачтено</option>`;

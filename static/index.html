@@ -144,10 +144,10 @@
             </a>
             <div class="nav-actions">
                 <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
-                    <i class="bi bi-key me-1"></i>Пароль
+                    <i class="bi bi-key"></i><span class="d-none d-sm-inline ms-1">Пароль</span>
                 </button>
                 <button id="logout-btn" class="btn btn-sm btn-outline-light">
-                    <i class="bi bi-box-arrow-right me-1"></i>Выйти
+                    <i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">Выйти</span>
                 </button>
             </div>
         </nav>
@@ -212,13 +212,13 @@
 
                 <p class="section-title"><i class="bi bi-bar-chart-line me-2"></i>Успеваемость</p>
                 <div class="table-responsive">
-                    <table class="table table-bordered table-hover bg-white">
+                    <table class="table table-bordered table-hover table-sm bg-white">
                         <thead class="table-light">
                             <tr>
                                 <th>Предмет</th>
                                 <th>Оценка</th>
                                 <th>Статус</th>
-                                <th>Дата</th>
+                                <th class="d-none d-sm-table-cell">Дата</th>
                             </tr>
                         </thead>
                         <tbody id="grades"></tbody>
@@ -570,7 +570,7 @@
                     }
                     grades.forEach(g => {
                         const tr = document.createElement('tr');
-                        tr.innerHTML = `<td>${g.subject}</td><td>${g.grade || '–'}</td><td>${g.status || '–'}</td><td>${g.graded_at || '—'}</td>`;
+                        tr.innerHTML = `<td>${g.subject}</td><td>${g.grade || '–'}</td><td>${g.status || '–'}</td><td class="d-none d-sm-table-cell">${g.graded_at || '—'}</td>`;
                         tbody.appendChild(tr);
                     });
                 } catch (err) {

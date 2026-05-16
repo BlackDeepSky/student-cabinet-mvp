@@ -122,4 +122,6 @@ BEGIN
     ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_user_type_check;
     ALTER TABLE sessions ADD CONSTRAINT sessions_user_type_check
         CHECK (user_type IN ('student', 'teacher', 'admin'));
+EXCEPTION WHEN duplicate_object THEN
+    NULL;
 END $$;

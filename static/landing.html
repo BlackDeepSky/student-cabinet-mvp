@@ -68,7 +68,38 @@
       transition: color .15s;
     }
     .admin-link:hover { color: #6b7280; }
-    .tagline { color: #374151; font-size: 1rem; }
+    .hero {
+      text-align: center;
+      margin-bottom: 2.2rem;
+    }
+    .hero .brand-logo {
+      margin: 0 auto 1rem;
+    }
+    .hero h1 {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -.02em;
+      margin-bottom: .3rem;
+      color: #111827;
+    }
+    .hero .tagline {
+      color: #6b7280;
+      font-size: .95rem;
+    }
+    .divider {
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      margin: 1.8rem 0;
+    }
+    .choose-label {
+      text-align: center;
+      font-size: .85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: #9ca3af;
+      margin-bottom: 1.1rem;
+    }
   </style>
 </head>
 <body>
@@ -76,20 +107,17 @@
   <div class="flex-grow-1 d-flex align-items-center justify-content-center p-3">
     <div style="max-width:560px; width:100%;">
 
-      <!-- Лого + заголовок -->
-      <div class="d-flex align-items-center gap-3 mb-4">
+      <!-- Hero-блок -->
+      <div class="hero">
         <div class="brand-logo">
           <i class="bi bi-mortarboard-fill text-white" style="font-size:1.5rem"></i>
         </div>
-        <div>
-          <div style="font-size:1.3rem;font-weight:700;line-height:1.15">КабинетЗаочника</div>
-          <div class="tagline">Система сдачи учебных работ</div>
-        </div>
+        <h1>КабинетЗаочника</h1>
+        <div class="tagline">Система сдачи учебных работ для заочников</div>
       </div>
 
-      <p class="text-muted mb-4" style="font-size:.95rem">
-        Добро пожаловать. Выберите, как вы входите в систему:
-      </p>
+      <hr class="divider">
+      <div class="choose-label">Выберите, как вы входите</div>
 
       <!-- Карточки ролей -->
       <div class="row g-3 mb-4">

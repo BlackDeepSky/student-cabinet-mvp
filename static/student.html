@@ -469,6 +469,7 @@
                         const submittedAt = a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('ru-RU') : null;
                         const dateStr = submittedAt ? ` (${submittedAt})` : '';
 
+                        const isNotebook = a.submission_type === 'notebook';
                         const classMap = { submitted: 'status-submitted', in_review: 'status-in_review', approved: 'status-approved', rejected: 'status-rejected', resubmitted: 'status-rejected', notebook_sent: 'status-in_review' };
                         let statusBadge = '';
                         if (a.status_label && a.status_label !== '—') {
@@ -488,7 +489,6 @@
                             feedbackBlock = `<button class="btn btn-sm btn-outline-info mt-2 download-feedback" data-submission-id="${a.submission_id}"><i class="bi bi-paperclip me-1"></i>Скачать комментарий преподавателя</button>`;
                         }
 
-                        const isNotebook = a.submission_type === 'notebook';
                         let actionBlock = '';
                         if (isNotebook) {
                             if (a.status === 'approved') {

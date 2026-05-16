@@ -157,6 +157,17 @@
             .ql-red    { background: #fee2e2; color: #dc2626; }
             .ql-gray   { background: #f1f5f9; color: #64748b; }
 
+            /* Assignments grid on desktop */
+            @media (min-width: 768px) {
+                #assignments {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 1rem;
+                    align-items: start;
+                }
+                #assignments .assignment-card { margin-bottom: 0; }
+            }
+
             /* Table */
             .table { border-radius: 10px; overflow: hidden; }
             .section-title {

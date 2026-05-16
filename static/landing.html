@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>КабинетЗаочника</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --brand: #2563eb; --brand-dark: #1d4ed8; }
+    * { font-family: 'Inter', sans-serif; }
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+      display: flex;
+      flex-direction: column;
+    }
+    .brand-logo {
+      width: 52px; height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 14px rgba(37,99,235,.35);
+      flex-shrink: 0;
+    }
+    .role-card {
+      border: 2px solid #e5e7eb;
+      border-radius: 18px;
+      padding: 2.2rem 2rem;
+      cursor: pointer;
+      transition: border-color .2s, box-shadow .2s, transform .18s;
+      background: #fff;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+    .role-card:hover {
+      border-color: var(--brand);
+      box-shadow: 0 6px 28px rgba(37,99,235,.15);
+      transform: translateY(-3px);
+      color: inherit;
+    }
+    .role-icon {
+      width: 64px; height: 64px;
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem;
+      margin-bottom: 1.1rem;
+    }
+    .role-icon.student  { background: #eff6ff; color: var(--brand); }
+    .role-icon.teacher  { background: #f0fdf4; color: #16a34a; }
+    .role-card h5 { font-weight: 700; font-size: 1.15rem; margin-bottom: .35rem; }
+    .role-card p  { color: #6b7280; font-size: .9rem; margin: 0; line-height: 1.5; }
+    .btn-enter {
+      margin-top: 1.4rem;
+      border-radius: 10px;
+      padding: .55rem 1.4rem;
+      font-weight: 600;
+      font-size: .9rem;
+    }
+    .admin-link {
+      color: #9ca3af;
+      font-size: .8rem;
+      text-decoration: none;
+      transition: color .15s;
+    }
+    .admin-link:hover { color: #6b7280; }
+    .tagline { color: #374151; font-size: 1rem; }
+  </style>
+</head>
+<body>
+
+  <div class="flex-grow-1 d-flex align-items-center justify-content-center p-3">
+    <div style="max-width:560px; width:100%;">
+
+      <!-- Лого + заголовок -->
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div class="brand-logo">
+          <i class="bi bi-mortarboard-fill text-white" style="font-size:1.5rem"></i>
+        </div>
+        <div>
+          <div style="font-size:1.3rem;font-weight:700;line-height:1.15">КабинетЗаочника</div>
+          <div class="tagline">Система сдачи учебных работ</div>
+        </div>
+      </div>
+
+      <p class="text-muted mb-4" style="font-size:.95rem">
+        Добро пожаловать. Выберите, как вы входите в систему:
+      </p>
+
+      <!-- Карточки ролей -->
+      <div class="row g-3 mb-4">
+        <div class="col-sm-6">
+          <a href="/student" class="role-card h-100 d-flex flex-column">
+            <div class="role-icon student">
+              <i class="bi bi-person-fill"></i>
+            </div>
+            <h5>Студент</h5>
+            <p>Сдача работ, отслеживание статусов, оценки и рецензии преподавателя</p>
+            <div class="mt-auto">
+              <span class="btn btn-primary btn-enter">
+                <i class="bi bi-box-arrow-in-right me-1"></i>Войти
+              </span>
+            </div>
+          </a>
+        </div>
+        <div class="col-sm-6">
+          <a href="/teacher" class="role-card h-100 d-flex flex-column">
+            <div class="role-icon teacher">
+              <i class="bi bi-person-badge-fill"></i>
+            </div>
+            <h5>Преподаватель</h5>
+            <p>Проверка работ, выставление статусов, рецензии и обратная связь</p>
+            <div class="mt-auto">
+              <span class="btn btn-success btn-enter">
+                <i class="bi bi-box-arrow-in-right me-1"></i>Войти
+              </span>
+            </div>
+          </a>
+        </div>
+      </div>
+
+      <!-- Ссылка на Admin -->
+      <div class="text-center">
+        <a href="/admin" class="admin-link">
+          <i class="bi bi-shield-lock me-1"></i>Вход для администратора
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Футер -->
+  <footer class="text-center py-3" style="color:#d1d5db;font-size:.78rem">
+    КабинетЗаочника &nbsp;·&nbsp; Система управления учебными работами
+  </footer>
+
+</body>
+</html>

@@ -259,8 +259,12 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
+async def landing_page():
+    with open("static/landing.html", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
 @app.get("/student", response_class=HTMLResponse)
-async def root():
+async def student_page():
     with open("static/index.html", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 

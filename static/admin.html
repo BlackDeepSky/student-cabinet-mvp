@@ -69,6 +69,27 @@
       padding: 1.25rem;
       margin-bottom: 1.5rem;
     }
+    .stat-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.25rem 1rem;
+      box-shadow: 0 1px 6px rgba(0,0,0,.07);
+      text-align: center;
+      height: 100%;
+    }
+    .stat-icon {
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+      margin: 0 auto 0.6rem;
+    }
+    .stat-blue   { background: #dbeafe; color: #1d6fef; }
+    .stat-green  { background: #d1fae5; color: #059669; }
+    .stat-yellow { background: #fef3c7; color: #d97706; }
+    .stat-red    { background: #fee2e2; color: #dc2626; }
+    .stat-value  { font-size: 1.75rem; font-weight: 700; line-height: 1.1; margin-bottom: 0.15rem; }
+    .stat-label  { font-size: 0.8rem; color: #6c757d; font-weight: 500; }
     .nav-tabs .nav-link { color: #495057; }
     .nav-tabs .nav-link.active { font-weight: 600; }
     .table { margin-bottom: 0; }
@@ -124,35 +145,31 @@
       <!-- Дашборд -->
       <div class="row g-3 mb-4" id="stats-row">
         <div class="col-6 col-md-3">
-          <div class="card text-center border-0 shadow-sm h-100">
-            <div class="card-body py-3">
-              <div class="fs-2 fw-bold text-primary" id="stat-students">—</div>
-              <div class="text-muted small">Студентов</div>
-            </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-blue"><i class="bi bi-people-fill"></i></div>
+            <div class="stat-value text-primary" id="stat-students">—</div>
+            <div class="stat-label">Студентов</div>
           </div>
         </div>
         <div class="col-6 col-md-3">
-          <div class="card text-center border-0 shadow-sm h-100">
-            <div class="card-body py-3">
-              <div class="fs-2 fw-bold text-success" id="stat-teachers">—</div>
-              <div class="text-muted small">Преподавателей</div>
-            </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-green"><i class="bi bi-person-workspace"></i></div>
+            <div class="stat-value text-success" id="stat-teachers">—</div>
+            <div class="stat-label">Преподавателей</div>
           </div>
         </div>
         <div class="col-6 col-md-3">
-          <div class="card text-center border-0 shadow-sm h-100">
-            <div class="card-body py-3">
-              <div class="fs-2 fw-bold text-warning" id="stat-pending">—</div>
-              <div class="text-muted small">На проверке</div>
-            </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-yellow"><i class="bi bi-hourglass-split"></i></div>
+            <div class="stat-value text-warning" id="stat-pending">—</div>
+            <div class="stat-label">На проверке</div>
           </div>
         </div>
         <div class="col-6 col-md-3">
-          <div class="card text-center border-0 shadow-sm h-100">
-            <div class="card-body py-3">
-              <div class="fs-2 fw-bold text-danger" id="stat-overdue">—</div>
-              <div class="text-muted small">Просрочено</div>
-            </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-red"><i class="bi bi-exclamation-triangle-fill"></i></div>
+            <div class="stat-value text-danger" id="stat-overdue">—</div>
+            <div class="stat-label">Просрочено</div>
           </div>
         </div>
       </div>

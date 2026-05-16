@@ -88,12 +88,19 @@
             /* Cards */
             .assignment-card {
                 border: none;
+                border-left: 4px solid #dee2e6;
                 border-radius: 12px;
                 box-shadow: 0 1px 6px rgba(0,0,0,.07);
                 margin-bottom: 1rem;
                 transition: box-shadow .15s;
             }
             .assignment-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+            .assignment-card.card-status-approved    { border-left-color: #198754; }
+            .assignment-card.card-status-in_review   { border-left-color: #f59e0b; }
+            .assignment-card.card-status-rejected    { border-left-color: #dc3545; }
+            .assignment-card.card-status-resubmitted { border-left-color: #dc3545; }
+            .assignment-card.card-status-submitted   { border-left-color: #6c757d; }
+            .assignment-card.card-status-pending     { border-left-color: var(--brand); }
             .assignment-card .subject-label {
                 font-size: .8rem;
                 font-weight: 600;
@@ -114,11 +121,41 @@
             }
 
             /* Quick-links */
-            .quick-links .btn {
-                border-radius: 8px;
-                font-size: .85rem;
-                padding: .4rem .75rem;
+            .quick-links-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 0.6rem;
             }
+            @media (min-width: 480px) { .quick-links-grid { grid-template-columns: repeat(6, 1fr); } }
+            .quick-link-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0.35rem;
+                padding: 0.75rem 0.25rem;
+                background: #fff;
+                border-radius: 12px;
+                box-shadow: 0 1px 4px rgba(0,0,0,.07);
+                text-decoration: none;
+                color: #495057;
+                font-size: 0.72rem;
+                font-weight: 500;
+                text-align: center;
+                transition: box-shadow .15s, transform .15s;
+            }
+            .quick-link-item:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); transform: translateY(-1px); color: #495057; }
+            .quick-link-icon {
+                width: 38px; height: 38px;
+                border-radius: 10px;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 1rem;
+            }
+            .ql-blue   { background: #dbeafe; color: #1d6fef; }
+            .ql-orange { background: #fef3c7; color: #d97706; }
+            .ql-green  { background: #d1fae5; color: #059669; }
+            .ql-teal   { background: #cffafe; color: #0891b2; }
+            .ql-red    { background: #fee2e2; color: #dc2626; }
+            .ql-gray   { background: #f1f5f9; color: #64748b; }
 
             /* Table */
             .table { border-radius: 10px; overflow: hidden; }
@@ -188,24 +225,30 @@
                 </div>
 
                 <!-- Quick links -->
-                <div class="quick-links d-flex flex-wrap gap-2 mb-4">
-                    <a href="https://www.politex.mogilev.by/zaochnik/raspisanie-zanyatiy-818" class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener">
-                        <i class="bi bi-calendar2-week me-1"></i>Расписание
+                <div class="quick-links-grid mb-4">
+                    <a href="https://www.politex.mogilev.by/zaochnik/raspisanie-zanyatiy-818" class="quick-link-item" target="_blank" rel="noopener">
+                        <div class="quick-link-icon ql-blue"><i class="bi bi-calendar2-week"></i></div>
+                        <span>Расписание</span>
                     </a>
-                    <a href="https://www.politex.mogilev.by/zaochnik/uchebnye-materialy-282" class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener">
-                        <i class="bi bi-book me-1"></i>Материалы
+                    <a href="https://www.politex.mogilev.by/zaochnik/uchebnye-materialy-282" class="quick-link-item" target="_blank" rel="noopener">
+                        <div class="quick-link-icon ql-orange"><i class="bi bi-book"></i></div>
+                        <span>Материалы</span>
                     </a>
-                    <a href="https://www.politex.mogilev.by/uchebnye-grafiki-126" class="btn btn-outline-success btn-sm" target="_blank" rel="noopener">
-                        <i class="bi bi-graph-up me-1"></i>Учебные графики
+                    <a href="https://www.politex.mogilev.by/uchebnye-grafiki-126" class="quick-link-item" target="_blank" rel="noopener">
+                        <div class="quick-link-icon ql-green"><i class="bi bi-graph-up"></i></div>
+                        <span>Уч. графики</span>
                     </a>
-                    <a href="https://www.politex.mogilev.by/zaochnik/raspisanie-konsultaciy-2099" class="btn btn-outline-info btn-sm" target="_blank" rel="noopener">
-                        <i class="bi bi-person-video3 me-1"></i>Консультации
+                    <a href="https://www.politex.mogilev.by/zaochnik/raspisanie-konsultaciy-2099" class="quick-link-item" target="_blank" rel="noopener">
+                        <div class="quick-link-icon ql-teal"><i class="bi bi-person-video3"></i></div>
+                        <span>Консультации</span>
                     </a>
-                    <a href="https://www.politex.mogilev.by/node/2026" class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener">
-                        <i class="bi bi-cash-coin me-1"></i>Оплата
+                    <a href="https://www.politex.mogilev.by/node/2026" class="quick-link-item" target="_blank" rel="noopener">
+                        <div class="quick-link-icon ql-red"><i class="bi bi-cash-coin"></i></div>
+                        <span>Оплата</span>
                     </a>
-                    <a href="https://www.politex.mogilev.by/" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener">
-                        <i class="bi bi-house-door me-1"></i>Сайт колледжа
+                    <a href="https://www.politex.mogilev.by/" class="quick-link-item" target="_blank" rel="noopener">
+                        <div class="quick-link-icon ql-gray"><i class="bi bi-house-door"></i></div>
+                        <span>Сайт</span>
                     </a>
                 </div>
 
@@ -449,7 +492,7 @@
                         }
 
                         const el = document.createElement('div');
-                        el.className = 'assignment-card card';
+                        el.className = `assignment-card card card-status-${a.status || 'pending'}`;
                         el.innerHTML = `
                             <div class="card-body">
                                 <div class="subject-label">${a.subject}</div>

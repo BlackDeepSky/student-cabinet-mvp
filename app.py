@@ -42,6 +42,11 @@ ALLOWED_EXTENSIONS = {
     '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
     '.zip', '.rar', '.7z', '.png', '.jpg', '.jpeg', '.gif',
     '.txt', '.rtf', '.odt', '.ods', '.odp',
+    # исходники кода
+    '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.js', '.ts',
+    '.jsx', '.tsx', '.html', '.css', '.sql', '.php', '.rb', '.go',
+    '.rs', '.kt', '.swift', '.r', '.m', '.ipynb', '.json', '.xml',
+    '.yaml', '.yml', '.md',
 }
 
 # === Настройка SMTP ===

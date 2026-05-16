@@ -50,3 +50,7 @@ Thumbs.db
 # Claude
 CLAUDE.md
 tasks.md
+TESTERS.txt
+
+# Бэкапы БД
+*.sql

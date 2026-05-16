@@ -442,32 +442,35 @@
         }
 
         submissions.forEach(row => {
-          const statusClassMap = { submitted: 'status-submitted', in_review: 'status-in_review', approved: 'status-approved', rejected: 'status-rejected', resubmitted: 'status-rejected' };
+          const statusClassMap = { submitted: 'status-submitted', in_review: 'status-in_review', approved: 'status-approved', rejected: 'status-rejected', resubmitted: 'status-rejected', notebook_sent: 'status-in_review' };
           const cls = statusClassMap[row.last_status] || 'status-submitted';
-          const statusBadge = row.last_status_label ? `<span class="status-badge ${cls}">${row.last_status_label}</span>` : '—';
+          const statusBadge = row.last_status_label ? `<span class="status-badge ${cls}">${row.last_status_label}</span>` : '<span class="status-badge status-submitted">Не отмечено</span>';
           const lastAction = row.last_action_at
             ? new Date(row.last_action_at).toLocaleString('ru-RU')
             : (row.submitted_at ? new Date(row.submitted_at).toLocaleString('ru-RU') + ' (отправлена)' : '—');
+          const isNotebook = row.submission_type === 'notebook';
+          const typeIcon = isNotebook ? '<i class="bi bi-book text-secondary ms-1" title="В тетради"></i>' : '';
 
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td>${row.student_name}<br><small class="text-muted">${row.student_id}</small></td>
             <td class="d-none d-md-table-cell">${row.subject}</td>
-            <td>${row.title}<br>${deadlineBadge(row.deadline)}</td>
+            <td>${row.title}${typeIcon}<br>${deadlineBadge(row.deadline)}</td>
             <td>${statusBadge}</td>
             <td class="d-none d-md-table-cell"><small>${lastAction}</small></td>
             <td>
-              <button class="btn btn-sm btn-outline-primary view-files"
+              ${isNotebook ? '<span class="text-muted" style="font-size:.8rem"><i class="bi bi-envelope me-1"></i>Почтой</span>' : `<button class="btn btn-sm btn-outline-primary view-files"
                       data-assignment-id="${row.assignment_id}"
                       data-student-id="${row.student_id}">
                 <i class="bi bi-paperclip"></i>
-              </button>
+              </button>`}
             </td>
             <td>
               <button class="btn btn-sm btn-outline-success set-grade"
                       data-student-id="${row.student_id}"
                       data-subject-name="${row.subject}"
-                      data-assignment-id="${row.assignment_id}">
+                      data-assignment-id="${row.assignment_id}"
+                      data-submission-type="${row.submission_type || 'electronic'}">
                 <i class="bi bi-pencil-square"></i>
               </button>
             </td>`;
@@ -512,9 +515,17 @@
             document.getElementById('review').value = '';
             document.getElementById('feedback-file').value = '';
             document.getElementById('feedback-file-block').style.display = 'none';
+            const isNotebook = b.dataset.submissionType === 'notebook';
             const statusSelect = document.getElementById('status-input');
+            statusSelect.innerHTML = isNotebook
+              ? `<option value="зачёт">Зачтено</option>
+                 <option value="не зачтено">Не зачтено</option>
+                 <option value="нет в кабинете">Нет в кабинете (не отмечено студентом)</option>`
+              : `<option value="принят на рассмотрение">Принят на рассмотрение</option>
+                 <option value="зачёт">Зачёт</option>
+                 <option value="не зачтено">Не зачтено</option>`;
             statusSelect.onchange = () => {
-              document.getElementById('feedback-file-block').style.display = statusSelect.value === 'не зачтено' ? 'block' : 'none';
+              document.getElementById('feedback-file-block').style.display = (!isNotebook && statusSelect.value === 'не зачтено') ? 'block' : 'none';
               if (statusSelect.value !== 'не зачтено') document.getElementById('feedback-file').value = '';
             };
             bootstrap.Modal.getOrCreateInstance(document.getElementById('gradeModal')).show();
@@ -609,7 +620,7 @@
       if (rows.length === 0) { emptyMsg.style.display = 'block'; return; }
       emptyMsg.style.display = 'none';
       const today = new Date(); today.setHours(0,0,0,0);
-      const STATUS_LABELS = { submitted: 'Отправлено', in_review: 'На рассмотрении', approved: 'Зачтено', rejected: 'Не зачтено', resubmitted: 'Повторно отправлено' };
+      const STATUS_LABELS = { submitted: 'Отправлено', in_review: 'На рассмотрении', approved: 'Зачтено', rejected: 'Не зачтено', resubmitted: 'Повторно отправлено', notebook_sent: 'Тетрадь отправлена почтой' };
       rows.forEach(row => {
         const isApproved = row.status === 'approved';
         const isNotSubmitted = !row.status;

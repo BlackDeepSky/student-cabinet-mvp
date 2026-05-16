@@ -418,6 +418,79 @@ async def submit_work(
 
     return {"message": f"Отправлено {saved_count} файлов"}
 
+@app.post("/api/submit-notebook/{assignment_id}")
+async def submit_notebook(
+    assignment_id: int,
+    background_tasks: BackgroundTasks,
+    session = Depends(require_auth)
+):
+    user_id, user_type = session
+    if user_type != "student":
+        raise HTTPException(403, "Доступ запрещён")
+
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT a.id, a.title, a.submission_type, s.name AS subject
+            FROM assignments a JOIN subjects s ON a.subject_id = s.id
+            WHERE a.id = %s
+        """, (assignment_id,))
+        assignment_row = cur.fetchone()
+        if not assignment_row:
+            raise HTTPException(404, "Задание не найдено")
+        if assignment_row["submission_type"] != "notebook":
+            raise HTTPException(400, "Это задание сдаётся в электронном виде")
+
+        cur = conn.execute("""
+            SELECT 1 FROM grades g
+            JOIN assignments a ON a.subject_id = g.subject_id
+            WHERE a.id = %s AND g.student_id = %s
+        """, (assignment_id, user_id))
+        if cur.fetchone():
+            raise HTTPException(409, "Оценка по предмету уже выставлена.")
+
+        cur = conn.execute("""
+            SELECT id, status FROM submissions
+            WHERE student_id = %s AND assignment_id = %s
+        """, (user_id, assignment_id))
+        existing = cur.fetchone()
+
+        if existing and existing["status"] == "approved":
+            raise HTTPException(409, "Работа уже зачтена.")
+
+        conn.execute("""
+            INSERT INTO submissions (student_id, assignment_id, status, submitted_at)
+            VALUES (%s, %s, 'notebook_sent', CURRENT_TIMESTAMP)
+            ON CONFLICT (student_id, assignment_id)
+            DO UPDATE SET status = 'notebook_sent', submitted_at = CURRENT_TIMESTAMP
+        """, (user_id, assignment_id))
+
+        cur = conn.execute("""
+            SELECT last_name, first_name FROM students WHERE id = %s
+        """, (user_id,))
+        student_row = cur.fetchone()
+        student_name = f"{student_row['last_name']} {student_row['first_name']}" if student_row else "Студент"
+
+        cur = conn.execute("""
+            SELECT t.email FROM teachers t
+            JOIN subject_teachers st_link ON t.id = st_link.teacher_id
+            JOIN assignments a ON a.subject_id = st_link.subject_id
+            WHERE a.id = %s AND t.email IS NOT NULL
+        """, (assignment_id,))
+        teacher_emails = [row[0] for row in cur.fetchall()]
+
+    assignment_title = assignment_row["title"]
+    subject_name = assignment_row["subject"]
+    for email in teacher_emails:
+        background_tasks.add_task(
+            send_email, email,
+            f"Тетрадь отправлена почтой — {assignment_title}",
+            f"Студент {student_name} отметил отправку тетради по заданию «{assignment_title}» "
+            f"(предмет «{subject_name}») почтой.\n\nВойдите в кабинет преподавателя для проверки."
+        )
+
+    return {"message": "Отмечено как отправлено почтой"}
+
+
 # Эндпоинты для студентов (/me)
 @app.get("/api/assignments/me")
 async def get_my_assignments(session = Depends(require_auth)):
@@ -427,7 +500,8 @@ async def get_my_assignments(session = Depends(require_auth)):
 
     with get_db() as conn:
         cur = conn.execute("""
-            SELECT a.id, a.title, a.description, a.deadline, s.id AS subject_id, s.name AS subject
+            SELECT a.id, a.title, a.description, a.deadline, a.submission_type,
+                   s.id AS subject_id, s.name AS subject
             FROM assignments a
             JOIN subjects s ON a.subject_id = s.id
             JOIN student_subjects ss ON s.id = ss.subject_id
@@ -499,7 +573,8 @@ async def get_my_assignments(session = Depends(require_auth)):
             "in_review": "На рассмотрении",
             "approved": "Зачтено",
             "rejected": "Не зачтено",
-            "resubmitted": "Не зачтено (повторно отправлена)"
+            "resubmitted": "Не зачтено (повторно отправлена)",
+            "notebook_sent": "Тетрадь отправлена почтой"
         }
 
         return [
@@ -510,6 +585,7 @@ async def get_my_assignments(session = Depends(require_auth)):
                 "title": a["title"],
                 "description": a["description"],
                 "deadline": a["deadline"],
+                "submission_type": a["submission_type"] or "electronic",
                 "status": submission_map[a["id"]]["status"],
                 "status_label": STATUS_LABELS.get(submission_map[a["id"]]["status"], "Не отправлено"),
                 "submitted_at": submission_map[a["id"]]["submitted_at"],
@@ -621,6 +697,7 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
                 a.id AS assignment_id,
                 a.title,
                 a.deadline,
+                a.submission_type,
                 s.name AS subject,
                 st.last_name || ' ' || st.first_name AS student_name,
                 st.student_id,
@@ -630,11 +707,19 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
             FROM assignments a
             JOIN subjects s ON a.subject_id = s.id
             JOIN subject_teachers st_link ON s.id = st_link.subject_id
-            JOIN submissions sub ON sub.assignment_id = a.id
-            JOIN students st ON sub.student_id = st.id
+            JOIN student_subjects ss ON ss.subject_id = s.id
+            JOIN students st ON ss.student_id = st.id
+            LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.student_id = st.id
             LEFT JOIN grades g ON g.student_id = st.id AND g.subject_id = s.id
             WHERE st_link.teacher_id = %s
-            AND (sub.status IS NULL OR sub.status NOT IN ('approved'))
+            AND (
+                (COALESCE(a.submission_type, 'electronic') = 'electronic'
+                 AND sub.id IS NOT NULL
+                 AND (sub.status IS NULL OR sub.status NOT IN ('approved')))
+                OR
+                (a.submission_type = 'notebook'
+                 AND (sub.status IS NULL OR sub.status NOT IN ('approved')))
+            )
             ORDER BY a.deadline DESC, st.last_name
         """, (user_id,))
 
@@ -643,7 +728,8 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
             "in_review": "На рассмотрении",
             "approved": "Зачтено",
             "rejected": "Не зачтено",
-            "resubmitted": "Не зачтено (повторно отправлена)"
+            "resubmitted": "Не зачтено (повторно отправлена)",
+            "notebook_sent": "Тетрадь отправлена почтой"
         }
 
         result = []
@@ -652,12 +738,13 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
                 "assignment_id": row["assignment_id"],
                 "title": row["title"],
                 "deadline": row["deadline"],
+                "submission_type": row["submission_type"] or "electronic",
                 "subject": row["subject"],
                 "student_name": row["student_name"],
                 "student_id": row["student_id"],
                 "submitted_at": row["submitted_at"],
                 "last_status": row["last_status"],
-                "last_status_label": STATUS_LABELS.get(row["last_status"], "—"),
+                "last_status_label": STATUS_LABELS.get(row["last_status"], "Не отмечено"),
                 "last_action_at": row["last_action_at"]
             })
         return result
@@ -762,9 +849,20 @@ async def set_grade(
         if not cur.fetchone():
             raise HTTPException(403, "Задание не принадлежит этому предмету")
 
-        cur = conn.execute("SELECT title FROM assignments WHERE id = %s", (assignment_id,))
+        cur = conn.execute("""
+            SELECT title, submission_type FROM assignments WHERE id = %s
+        """, (assignment_id,))
         assignment_row = cur.fetchone()
         assignment_title = assignment_row["title"] if assignment_row else "Задание"
+        is_notebook = (assignment_row["submission_type"] == "notebook") if assignment_row else False
+
+        VALID_STATUSES = {"зачёт", "сдано", "не зачтено", "не допущен", "не сдано",
+                          "принят на рассмотрение", "нет в кабинете"}
+        if status_input not in VALID_STATUSES:
+            raise HTTPException(400, "Недопустимый статус")
+
+        if status_input == "нет в кабинете" and not is_notebook:
+            raise HTTPException(400, "Статус «нет в кабинете» применим только к тетрадным заданиям")
 
         if status_input == "не зачтено":
             cur = conn.execute("""
@@ -772,7 +870,7 @@ async def set_grade(
                 WHERE student_id = %s AND assignment_id = %s
             """, (student_id_int, assignment_id))
             submission_row = cur.fetchone()
-            if submission_row:
+            if submission_row and not is_notebook:
                 submission_id = submission_row[0]
                 cur = conn.execute(
                     "SELECT file_path FROM submission_files WHERE submission_id = %s",
@@ -795,15 +893,30 @@ async def set_grade(
             "не зачтено": "rejected",
             "не допущен": "rejected",
             "не сдано": "rejected",
+            "нет в кабинете": "rejected",
             "принят на рассмотрение": "in_review"
         }
         db_status = status_mapping.get(status_input, "submitted")
 
-        conn.execute("""
-            UPDATE submissions
-            SET status = %s, review = %s
-            WHERE student_id = %s AND assignment_id = %s
-        """, (db_status, review, student_id_int, assignment_id))
+        # Для тетрадных заданий создаём запись submission если её нет
+        if is_notebook:
+            conn.execute("""
+                INSERT INTO submissions (student_id, assignment_id, status, submitted_at)
+                VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (student_id, assignment_id) DO UPDATE SET status = %s
+            """, (student_id_int, assignment_id, db_status, db_status))
+        else:
+            conn.execute("""
+                UPDATE submissions
+                SET status = %s, review = %s
+                WHERE student_id = %s AND assignment_id = %s
+            """, (db_status, review, student_id_int, assignment_id))
+
+        if is_notebook:
+            conn.execute("""
+                UPDATE submissions SET review = %s
+                WHERE student_id = %s AND assignment_id = %s
+            """, (review, student_id_int, assignment_id))
 
         grade_value = 100 if status_input in ("зачёт", "сдано") else None
         conn.execute("""
@@ -824,6 +937,7 @@ async def set_grade(
             "не зачтено": "Не зачтено — требуется повторная сдача",
             "не допущен": "Не допущен",
             "не сдано": "Не зачтено",
+            "нет в кабинете": "Нет в кабинете — тетрадь не была отмечена как отправленная",
             "принят на рассмотрение": "Принято на рассмотрение",
         }
         status_label = STATUS_LABELS.get(status_input, status_input)
@@ -1293,7 +1407,8 @@ async def admin_subject_members(subject_id: int, admin_id = Depends(require_admi
 async def admin_list_assignments(admin_id = Depends(require_admin)):
     with get_db() as conn:
         cur = conn.execute("""
-            SELECT a.id, a.subject_id, a.title, a.description, a.deadline, s.name AS subject
+            SELECT a.id, a.subject_id, a.title, a.description, a.deadline,
+                   a.submission_type, s.name AS subject
             FROM assignments a JOIN subjects s ON s.id = a.subject_id
             ORDER BY a.deadline DESC NULLS LAST
         """)
@@ -1310,12 +1425,16 @@ async def admin_add_assignment(
     title: str = Form(...),
     description: str = Form(None),
     deadline: str = Form(None),
+    submission_type: str = Form("electronic"),
     admin_id = Depends(require_admin)
 ):
+    if submission_type not in ("electronic", "notebook"):
+        submission_type = "electronic"
     with get_db() as conn:
         cur = conn.execute("""
-            INSERT INTO assignments (subject_id, title, description, deadline) VALUES (%s, %s, %s, %s) RETURNING id
-        """, (subject_id, title, description or None, deadline or None))
+            INSERT INTO assignments (subject_id, title, description, deadline, submission_type)
+            VALUES (%s, %s, %s, %s, %s) RETURNING id
+        """, (subject_id, title, description or None, deadline or None, submission_type))
         return {"ok": True, "id": cur.fetchone()[0]}
 
 @app.put("/api/admin/assignments/{assignment_id}")
@@ -1325,15 +1444,19 @@ async def admin_edit_assignment(
     title: str = Form(...),
     description: str = Form(None),
     deadline: str = Form(None),
+    submission_type: str = Form("electronic"),
     admin_id = Depends(require_admin)
 ):
+    if submission_type not in ("electronic", "notebook"):
+        submission_type = "electronic"
     with get_db() as conn:
         cur = conn.execute("SELECT id FROM assignments WHERE id = %s", (assignment_id,))
         if not cur.fetchone():
             raise HTTPException(404, "Задание не найдено")
         conn.execute("""
-            UPDATE assignments SET subject_id=%s, title=%s, description=%s, deadline=%s WHERE id=%s
-        """, (subject_id, title, description or None, deadline or None, assignment_id))
+            UPDATE assignments SET subject_id=%s, title=%s, description=%s, deadline=%s, submission_type=%s
+            WHERE id=%s
+        """, (subject_id, title, description or None, deadline or None, submission_type, assignment_id))
     return {"ok": True}
 
 @app.delete("/api/admin/assignments/{assignment_id}")

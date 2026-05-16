@@ -22,12 +22,13 @@ CREATE TABLE IF NOT EXISTS subjects (
 
 -- Задания
 CREATE TABLE IF NOT EXISTS assignments (
-    id          SERIAL PRIMARY KEY,
-    subject_id  INTEGER NOT NULL,
-    title       TEXT NOT NULL,
-    description TEXT,
-    deadline    DATE,
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    id              SERIAL PRIMARY KEY,
+    subject_id      INTEGER NOT NULL,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    deadline        DATE,
+    submission_type TEXT DEFAULT 'electronic' CHECK (submission_type IN ('electronic', 'notebook')),
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
 );
 
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     FOREIGN KEY (student_id) REFERENCES students(id),
     FOREIGN KEY (assignment_id) REFERENCES assignments(id),
     UNIQUE(student_id, assignment_id),
-    CHECK (status IN ('submitted', 'in_review', 'rejected', 'approved', 'resubmitted'))
+    CHECK (status IN ('submitted', 'in_review', 'rejected', 'approved', 'resubmitted', 'notebook_sent'))
 );
 
 -- Файлы работ
@@ -123,5 +124,16 @@ BEGIN
     ALTER TABLE sessions ADD CONSTRAINT sessions_user_type_check
         CHECK (user_type IN ('student', 'teacher', 'admin'));
 EXCEPTION WHEN duplicate_object THEN
+    NULL;
+END $$;
+
+-- Миграция: тип сдачи задания и статус тетради
+DO $$
+BEGIN
+    ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submission_type TEXT DEFAULT 'electronic';
+    ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_status_check;
+    ALTER TABLE submissions ADD CONSTRAINT submissions_status_check
+        CHECK (status IN ('submitted', 'in_review', 'rejected', 'approved', 'resubmitted', 'notebook_sent'));
+EXCEPTION WHEN OTHERS THEN
     NULL;
 END $$;

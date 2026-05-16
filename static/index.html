@@ -469,7 +469,7 @@
                         const submittedAt = a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('ru-RU') : null;
                         const dateStr = submittedAt ? ` (${submittedAt})` : '';
 
-                        const classMap = { submitted: 'status-submitted', in_review: 'status-in_review', approved: 'status-approved', rejected: 'status-rejected', resubmitted: 'status-rejected' };
+                        const classMap = { submitted: 'status-submitted', in_review: 'status-in_review', approved: 'status-approved', rejected: 'status-rejected', resubmitted: 'status-rejected', notebook_sent: 'status-in_review' };
                         let statusBadge = '';
                         if (a.status_label && a.status_label !== '—') {
                             statusBadge = `<span class="status-badge ${classMap[a.status] || 'status-submitted'}">${a.status_label}${dateStr}</span>`;
@@ -487,12 +487,26 @@
                             feedbackBlock = `<button class="btn btn-sm btn-outline-info mt-2 download-feedback" data-submission-id="${a.submission_id}"><i class="bi bi-paperclip me-1"></i>Скачать комментарий преподавателя</button>`;
                         }
 
+                        const isNotebook = a.submission_type === 'notebook';
                         let actionBlock = '';
                         if (a.final_grade_blocked) {
                             const statusText = a.final_grade_status ? `Оценка выставлена: ${a.final_grade_status}.` : 'Оценка по предмету уже выставлена.';
                             actionBlock = `<p class="text-muted mb-0 mt-2" style="font-size:.875rem">${statusText} Повторная сдача недоступна.</p>`;
                         } else if (a.status === 'approved') {
                             // nothing
+                        } else if (isNotebook) {
+                            if (a.status === 'notebook_sent') {
+                                actionBlock = '<p class="text-muted mb-0 mt-2" style="font-size:.875rem"><i class="bi bi-envelope-check me-1"></i>Тетрадь отмечена как отправленная. Ожидайте проверки.</p>';
+                            } else {
+                                const btnLabel = a.status === 'rejected' ? 'Отметить повторную отправку' : 'Отметить как отправлено почтой';
+                                actionBlock = `
+                                    <div class="mt-2">
+                                        <p class="text-muted mb-2" style="font-size:.875rem"><i class="bi bi-book me-1"></i>Выполните задание в тетради и отправьте её по почте. После отправки нажмите кнопку ниже.</p>
+                                        <button type="button" class="btn btn-primary btn-sm notebook-send-btn" data-assignment-id="${a.id}">
+                                            <i class="bi bi-envelope me-1"></i>${btnLabel}
+                                        </button>
+                                    </div>`;
+                            }
                         } else if (a.status === 'in_review') {
                             actionBlock = '<p class="text-muted mb-0 mt-2" style="font-size:.875rem"><i class="bi bi-hourglass-split me-1"></i>Работа проверяется преподавателем</p>';
                         } else {
@@ -596,6 +610,29 @@
                                 showToast('Не удалось отправить работу. Проверьте соединение.', 'danger');
                             } finally {
                                 btn.disabled = false;
+                            }
+                        });
+                    });
+
+                    document.querySelectorAll('.notebook-send-btn').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            const b = e.currentTarget;
+                            const assignmentId = b.dataset.assignmentId;
+                            b.disabled = true;
+                            try {
+                                const res = await fetch(`/api/submit-notebook/${assignmentId}`, { method: 'POST', headers: getAuthHeaders() });
+                                if (res.status === 401 || res.status === 403) { handleAuthError(); return; }
+                                if (res.ok) {
+                                    showToast('Отмечено! Преподаватель получит уведомление.');
+                                    loadAssignments();
+                                } else {
+                                    const err = await res.json().catch(() => ({ detail: 'Ошибка' }));
+                                    showToast('Ошибка: ' + (err.detail || ''), 'danger');
+                                }
+                            } catch {
+                                showToast('Не удалось отметить отправку. Проверьте соединение.', 'danger');
+                            } finally {
+                                b.disabled = false;
                             }
                         });
                     });

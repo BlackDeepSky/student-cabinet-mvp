@@ -465,6 +465,19 @@
             <div class="mb-2"><input type="text" name="title" class="form-control" placeholder="Название задания" required></div>
             <div class="mb-2"><textarea name="description" class="form-control" placeholder="Описание (необязательно)" rows="2"></textarea></div>
             <div class="mb-2"><input type="date" name="deadline" class="form-control"></div>
+            <div class="mb-2">
+              <label class="form-label fw-semibold">Способ сдачи</label>
+              <div class="d-flex gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="submission_type" id="add-type-electronic" value="electronic" checked>
+                  <label class="form-check-label" for="add-type-electronic"><i class="bi bi-file-earmark-arrow-up me-1"></i>Электронно</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="submission_type" id="add-type-notebook" value="notebook">
+                  <label class="form-check-label" for="add-type-notebook"><i class="bi bi-book me-1"></i>В тетради (почтой)</label>
+                </div>
+              </div>
+            </div>
           </form>
         </div>
         <div class="modal-footer">
@@ -491,6 +504,19 @@
             <div class="mb-2"><input type="text" name="title" class="form-control" placeholder="Название задания" required></div>
             <div class="mb-2"><textarea name="description" class="form-control" placeholder="Описание (необязательно)" rows="2"></textarea></div>
             <div class="mb-2"><input type="date" name="deadline" class="form-control"></div>
+            <div class="mb-2">
+              <label class="form-label fw-semibold">Способ сдачи</label>
+              <div class="d-flex gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="submission_type" id="edit-type-electronic" value="electronic">
+                  <label class="form-check-label" for="edit-type-electronic"><i class="bi bi-file-earmark-arrow-up me-1"></i>Электронно</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="submission_type" id="edit-type-notebook" value="notebook">
+                  <label class="form-check-label" for="edit-type-notebook"><i class="bi bi-book me-1"></i>В тетради (почтой)</label>
+                </div>
+              </div>
+            </div>
           </form>
         </div>
         <div class="modal-footer">
@@ -923,16 +949,20 @@
     async function loadAssignments() {
       const res = await fetch('/api/admin/assignments', { headers: authHeaders() });
       allAssignments = await res.json();
-      document.getElementById('assignments-tbody').innerHTML = allAssignments.map(a => `
-        <tr>
+      document.getElementById('assignments-tbody').innerHTML = allAssignments.map(a => {
+        const typeIcon = a.submission_type === 'notebook'
+          ? '<span class="badge bg-secondary ms-1" title="В тетради"><i class="bi bi-book"></i></span>'
+          : '<span class="badge bg-primary ms-1" title="Электронно"><i class="bi bi-file-earmark-arrow-up"></i></span>';
+        return `<tr>
           <td>${a.subject}</td>
-          <td>${a.title}</td>
+          <td>${a.title} ${typeIcon}</td>
           <td>${a.deadline || '—'}</td>
           <td class="text-nowrap">
             <button class="btn btn-outline-primary btn-sm" onclick="openEditAssignment(${a.id})" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button class="btn btn-outline-danger btn-sm" onclick="deleteAssignment(${a.id})"><i class="bi bi-trash"></i></button>
           </td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
     }
 
     document.getElementById('open-add-assignment-btn').addEventListener('click', () => {
@@ -964,6 +994,9 @@
       form.title.value = a.title;
       form.description.value = a.description || '';
       form.deadline.value = a.deadline || '';
+      const stype = a.submission_type || 'electronic';
+      document.getElementById('edit-type-electronic').checked = stype === 'electronic';
+      document.getElementById('edit-type-notebook').checked = stype === 'notebook';
       document.getElementById('edit-assignment-error').classList.add('d-none');
       new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
     }

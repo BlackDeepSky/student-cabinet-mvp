@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     submitted_at  TIMESTAMP,
     review        TEXT,
     FOREIGN KEY (student_id) REFERENCES students(id),
-    FOREIGN KEY (assignment_id) REFERENCES assignments(id),
+    FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
     UNIQUE(student_id, assignment_id),
     CHECK (status IN ('submitted', 'in_review', 'rejected', 'approved', 'resubmitted', 'notebook_sent'))
 );
@@ -134,6 +134,16 @@ BEGIN
     ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_status_check;
     ALTER TABLE submissions ADD CONSTRAINT submissions_status_check
         CHECK (status IN ('submitted', 'in_review', 'rejected', 'approved', 'resubmitted', 'notebook_sent'));
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
+
+-- Миграция: каскадное удаление submissions при удалении assignment
+DO $$
+BEGIN
+    ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_assignment_id_fkey;
+    ALTER TABLE submissions ADD CONSTRAINT submissions_assignment_id_fkey
+        FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE;
 EXCEPTION WHEN OTHERS THEN
     NULL;
 END $$;

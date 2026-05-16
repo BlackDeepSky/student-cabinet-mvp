@@ -36,6 +36,11 @@ def hash_password(password: str) -> str:
 
 # === Константы ===
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 МБ
+ALLOWED_EXTENSIONS = {
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.zip', '.rar', '.7z', '.png', '.jpg', '.jpeg', '.gif',
+    '.txt', '.rtf', '.odt', '.ods', '.odp',
+}
 
 # === Настройка SMTP ===
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
@@ -363,6 +368,9 @@ async def submit_work(
         for file in files:
             if not file.filename:
                 continue
+            ext = os.path.splitext(file.filename)[1].lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                raise HTTPException(400, f"Тип файла «{ext}» не разрешён. Допустимые форматы: PDF, DOC, DOCX, XLS, XLSX, ZIP, PNG, JPG и др.")
             if file.size > MAX_FILE_SIZE:
                 raise HTTPException(400, f"Файл {file.filename} слишком большой (макс. 10 МБ)")
             safe_name = sanitize_filename(file.filename)
@@ -549,6 +557,10 @@ async def change_password(
             f"UPDATE {table} SET password_hash = %s WHERE id = %s",
             (hash_password(new_password), user_id)
         )
+        conn.execute(
+            "DELETE FROM sessions WHERE user_id = %s AND user_type = %s",
+            (user_id, user_type)
+        )
     return {"ok": True}
 
 
@@ -668,8 +680,10 @@ async def get_submission_files(
             FROM submission_files sf
             JOIN submissions s ON sf.submission_id = s.id
             JOIN students st ON s.student_id = st.id
-            WHERE s.assignment_id = %s AND st.student_id = %s
-        """, (assignment_id, clean_id))
+            JOIN assignments a ON s.assignment_id = a.id
+            JOIN subject_teachers sub_t ON a.subject_id = sub_t.subject_id
+            WHERE s.assignment_id = %s AND st.student_id = %s AND sub_t.teacher_id = %s
+        """, (assignment_id, clean_id, user_id))
         return [
             {
                 "path": row[0],
@@ -709,6 +723,19 @@ async def set_grade(
         if not subject_row:
             raise HTTPException(404, "Предмет не найден")
         subject_id_int = subject_row[0]
+
+        cur = conn.execute("""
+            SELECT 1 FROM subject_teachers
+            WHERE subject_id = %s AND teacher_id = %s
+        """, (subject_id_int, user_id))
+        if not cur.fetchone():
+            raise HTTPException(403, "Вы не ведёте этот предмет")
+
+        cur = conn.execute("""
+            SELECT 1 FROM assignments WHERE id = %s AND subject_id = %s
+        """, (assignment_id, subject_id_int))
+        if not cur.fetchone():
+            raise HTTPException(403, "Задание не принадлежит этому предмету")
 
         cur = conn.execute("SELECT title FROM assignments WHERE id = %s", (assignment_id,))
         assignment_row = cur.fetchone()

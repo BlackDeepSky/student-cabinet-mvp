@@ -265,7 +265,7 @@ async def landing_page():
 
 @app.get("/student", response_class=HTMLResponse)
 async def student_page():
-    with open("static/index.html", encoding="utf-8") as f:
+    with open("static/student.html", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
 @app.get("/teacher", response_class=HTMLResponse)

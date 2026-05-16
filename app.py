@@ -9,6 +9,8 @@ import os
 import re
 import secrets
 import smtplib
+import time
+from collections import defaultdict
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
@@ -67,6 +69,20 @@ def send_email(to: str, subject: str, body: str):
         print(f"[email] Ошибка отправки на {to}: {e}")
 VALID_ID_PATTERN = re.compile(r"^[A-Za-z0-9\-_]+$")
 SESSION_EXPIRE_HOURS = 24
+
+# Rate limiting: не более 10 попыток входа с одного IP за 60 секунд
+_login_attempts: dict = defaultdict(list)
+_RATE_LIMIT_WINDOW = 60
+_RATE_LIMIT_MAX = 10
+
+def check_rate_limit(request: Request):
+    ip = request.headers.get("X-Forwarded-For", "")
+    ip = ip.split(",")[0].strip() if ip else (request.client.host if request.client else "unknown")
+    now = time.time()
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _RATE_LIMIT_WINDOW]
+    if len(_login_attempts[ip]) >= _RATE_LIMIT_MAX:
+        raise HTTPException(429, "Слишком много попыток входа. Попробуйте через минуту.")
+    _login_attempts[ip].append(now)
 
 # === Настройка БД ===
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -224,12 +240,14 @@ def _r2_stream(r2_key: str, filename: str) -> StreamingResponse:
 app = FastAPI()
 
 # Настройка CORS
+_cors_origins_env = os.environ.get("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
+_cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Подключение статики
@@ -273,7 +291,8 @@ async def get_badge(session = Depends(require_auth)):
 # ===== СТУДЕНТ =====
 
 @app.post("/api/login")
-async def login(student_id: str = Form(...), password: str = Form(...)):
+async def login(request: Request, student_id: str = Form(...), password: str = Form(...)):
+    check_rate_limit(request)
     clean_id = validate_id(student_id)
 
     with get_db() as conn:
@@ -567,7 +586,8 @@ async def change_password(
 # ===== ПРЕПОДАВАТЕЛЬ =====
 
 @app.post("/api/teacher/login")
-async def teacher_login(teacher_id: str = Form(...), password: str = Form(...)):
+async def teacher_login(request: Request, teacher_id: str = Form(...), password: str = Form(...)):
+    check_rate_limit(request)
     clean_id = validate_id(teacher_id)
 
     with get_db() as conn:
@@ -910,7 +930,8 @@ async def require_admin(authorization: str = Header(None)):
     return user_id
 
 @app.post("/api/admin/login")
-async def admin_login(admin_id: str = Form(...), password: str = Form(...)):
+async def admin_login(request: Request, admin_id: str = Form(...), password: str = Form(...)):
+    check_rate_limit(request)
     clean_id = validate_id(admin_id)
     with get_db() as conn:
         cur = conn.execute("SELECT id, password_hash FROM admins WHERE admin_id = %s", (clean_id,))

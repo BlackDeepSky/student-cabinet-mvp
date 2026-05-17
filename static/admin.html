@@ -94,9 +94,13 @@
     .stat-red    { background: #fee2e2; color: #dc2626; }
     .stat-value  { font-size: 1.75rem; font-weight: 700; line-height: 1.1; margin-bottom: 0.15rem; }
     .stat-label  { font-size: 0.8rem; color: #6c757d; font-weight: 500; }
+    .stat-card-clickable { transition: box-shadow .15s, transform .1s; }
+    .stat-card-clickable:hover { box-shadow: 0 4px 16px rgba(0,0,0,.12); transform: translateY(-2px); }
     .nav-tabs .nav-link { color: #495057; }
     .nav-tabs .nav-link.active { font-weight: 600; }
     .table { margin-bottom: 0; }
+    .detail-card { background:#fff; border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 0.5rem; border: 1px solid #e9ecef; transition: box-shadow .12s; }
+    .detail-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
     .toast-container { z-index: 9999; }
   </style>
 </head>
@@ -163,17 +167,17 @@
           </div>
         </div>
         <div class="col-6 col-md-3">
-          <div class="stat-card">
+          <div class="stat-card stat-card-clickable" id="card-pending" title="Посмотреть подробнее" style="cursor:pointer;">
             <div class="stat-icon stat-yellow"><i class="bi bi-hourglass-split"></i></div>
             <div class="stat-value text-warning" id="stat-pending">—</div>
-            <div class="stat-label">На проверке</div>
+            <div class="stat-label">На проверке <i class="bi bi-chevron-right" style="font-size:.7rem;opacity:.5;"></i></div>
           </div>
         </div>
         <div class="col-6 col-md-3">
-          <div class="stat-card">
+          <div class="stat-card stat-card-clickable" id="card-overdue" title="Посмотреть подробнее" style="cursor:pointer;">
             <div class="stat-icon stat-red"><i class="bi bi-exclamation-triangle-fill"></i></div>
             <div class="stat-value text-danger" id="stat-overdue">—</div>
-            <div class="stat-label">Просрочено</div>
+            <div class="stat-label">Просрочено <i class="bi bi-chevron-right" style="font-size:.7rem;opacity:.5;"></i></div>
           </div>
         </div>
       </div>
@@ -574,6 +578,50 @@
     </div>
   </div>
 
+  <!-- Modal: на проверке -->
+  <div class="modal fade" id="pendingDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-1">
+          <div>
+            <h5 class="modal-title fw-bold mb-0"><i class="bi bi-hourglass-split text-warning me-2"></i>Работы на проверке</h5>
+            <p class="text-muted small mb-0 mt-1">Ожидают ответа от преподавателя</p>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body pt-2">
+          <div id="pending-detail-list"></div>
+          <div id="pending-detail-empty" style="display:none;" class="text-center py-5 text-muted">
+            <i class="bi bi-inbox" style="font-size:2.5rem;opacity:.4;"></i>
+            <p class="mt-2 mb-0">Нет работ на проверке</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: просроченные -->
+  <div class="modal fade" id="overdueDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-1">
+          <div>
+            <h5 class="modal-title fw-bold mb-0"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Просроченные работы</h5>
+            <p class="text-muted small mb-0 mt-1">Дедлайн прошёл, зачёт не выставлен</p>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body pt-2">
+          <div id="overdue-detail-list"></div>
+          <div id="overdue-detail-empty" style="display:none;" class="text-center py-5 text-muted">
+            <i class="bi bi-check-circle" style="font-size:2.5rem;opacity:.4;color:#198754;"></i>
+            <p class="mt-2 mb-0">Просроченных работ нет</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: смена пароля администратора -->
   <div class="modal fade" id="changeAdminPasswordModal" tabindex="-1">
     <div class="modal-dialog">
@@ -689,6 +737,88 @@
       document.getElementById('stat-pending').textContent = d.pending;
       document.getElementById('stat-overdue').textContent = d.overdue;
     }
+
+    const PENDING_STATUS = { submitted: 'Отправлено', in_review: 'На проверке', resubmitted: 'Повторно отправлено', notebook_sent: 'Тетрадь отправлена' };
+    const PENDING_STATUS_COLOR = { submitted: '#6c757d', in_review: '#856404', resubmitted: '#0a3622', notebook_sent: '#055160' };
+
+    async function loadPendingDetails() {
+      const res = await fetch('/api/admin/pending-details', { headers: authHeaders() });
+      if (!res.ok) return;
+      const items = await res.json();
+      const list = document.getElementById('pending-detail-list');
+      const empty = document.getElementById('pending-detail-empty');
+      list.innerHTML = '';
+      if (items.length === 0) { empty.style.display = 'block'; }
+      else {
+        empty.style.display = 'none';
+        items.forEach(item => {
+          const statusLabel = PENDING_STATUS[item.status] || item.status;
+          const statusColor = PENDING_STATUS_COLOR[item.status] || '#6c757d';
+          const dateStr = item.submitted_at ? new Date(item.submitted_at).toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+          const typeIcon = item.submission_type === 'notebook' ? 'bi-book' : 'bi-file-earmark-text';
+          const card = document.createElement('div');
+          card.className = 'detail-card';
+          card.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-1">
+              <div>
+                <span class="fw-semibold">${escapeHtml(item.student_name)}</span>
+                <span class="text-muted ms-1" style="font-size:.8rem;">${escapeHtml(item.student_id)}</span>
+              </div>
+              <span class="badge rounded-pill" style="background:${statusColor}20;color:${statusColor};border:1px solid ${statusColor}40;font-size:.72rem;font-weight:500;">${statusLabel}</span>
+            </div>
+            <div class="mt-1" style="font-size:.84rem;">
+              <span class="text-muted">${escapeHtml(item.subject)}</span><span class="mx-1 text-muted">·</span><span>${escapeHtml(item.assignment_title)}</span>
+              <i class="bi ${typeIcon} ms-1 text-muted" style="font-size:.8rem;"></i>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-1 flex-wrap gap-1" style="font-size:.8rem;">
+              <span class="text-muted"><i class="bi bi-person-workspace me-1"></i>${escapeHtml(item.teacher_name)}</span>
+              <span class="text-muted"><i class="bi bi-clock me-1"></i>${dateStr}</span>
+            </div>`;
+          list.appendChild(card);
+        });
+      }
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('pendingDetailsModal')).show();
+    }
+
+    async function loadOverdueDetails() {
+      const res = await fetch('/api/admin/overdue-details', { headers: authHeaders() });
+      if (!res.ok) return;
+      const items = await res.json();
+      const list = document.getElementById('overdue-detail-list');
+      const empty = document.getElementById('overdue-detail-empty');
+      list.innerHTML = '';
+      if (items.length === 0) { empty.style.display = 'block'; }
+      else {
+        empty.style.display = 'none';
+        items.forEach(item => {
+          const deadlineDate = new Date(item.deadline);
+          const daysOverdue = Math.floor((Date.now() - deadlineDate) / 86400000);
+          const deadlineStr = deadlineDate.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+          const card = document.createElement('div');
+          card.className = 'detail-card';
+          card.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-1">
+              <div>
+                <span class="fw-semibold">${escapeHtml(item.student_name)}</span>
+                <span class="text-muted ms-1" style="font-size:.8rem;">${escapeHtml(item.student_id)}</span>
+              </div>
+              <span class="badge rounded-pill" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;font-size:.72rem;font-weight:500;">+${daysOverdue} дн.</span>
+            </div>
+            <div class="mt-1" style="font-size:.84rem;">
+              <span class="text-muted">${escapeHtml(item.subject)}</span><span class="mx-1 text-muted">·</span><span>${escapeHtml(item.assignment_title)}</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-1 flex-wrap gap-1" style="font-size:.8rem;">
+              <span class="text-muted"><i class="bi bi-person-workspace me-1"></i>${escapeHtml(item.teacher_name)}</span>
+              <span class="text-muted"><i class="bi bi-calendar-x me-1"></i>Срок: ${deadlineStr}</span>
+            </div>`;
+          list.appendChild(card);
+        });
+      }
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('overdueDetailsModal')).show();
+    }
+
+    document.getElementById('card-pending').addEventListener('click', loadPendingDetails);
+    document.getElementById('card-overdue').addEventListener('click', loadOverdueDetails);
 
     async function loadAll() {
       await Promise.all([loadStudents(), loadTeachers(), loadSubjects(), loadAssignments(), loadStats()]);

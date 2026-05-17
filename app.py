@@ -1118,6 +1118,58 @@ async def admin_stats(admin_id = Depends(require_admin)):
         """).fetchone()[0]
     return {"students": students, "teachers": teachers, "pending": pending, "overdue": overdue}
 
+@app.get("/api/admin/pending-details")
+async def admin_pending_details(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT
+                st.last_name || ' ' || st.first_name AS student_name,
+                st.student_id,
+                s.name AS subject,
+                a.title AS assignment_title,
+                a.submission_type,
+                sub.status,
+                sub.submitted_at,
+                COALESCE(t.last_name || ' ' || t.first_name, '—') AS teacher_name
+            FROM submissions sub
+            JOIN assignments a ON sub.assignment_id = a.id
+            JOIN subjects s ON a.subject_id = s.id
+            JOIN students st ON sub.student_id = st.id
+            LEFT JOIN subject_teachers stl ON s.id = stl.subject_id
+            LEFT JOIN teachers t ON stl.teacher_id = t.id
+            WHERE sub.status IN ('submitted', 'in_review', 'resubmitted', 'notebook_sent')
+            ORDER BY sub.submitted_at ASC NULLS LAST
+        """)
+        return [dict(row) for row in cur.fetchall()]
+
+@app.get("/api/admin/overdue-details")
+async def admin_overdue_details(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT
+                st.last_name || ' ' || st.first_name AS student_name,
+                st.student_id,
+                s.name AS subject,
+                a.title AS assignment_title,
+                a.deadline,
+                COALESCE(t.last_name || ' ' || t.first_name, '—') AS teacher_name
+            FROM student_subjects ss
+            JOIN assignments a ON a.subject_id = ss.subject_id
+            JOIN subjects s ON a.subject_id = s.id
+            JOIN students st ON ss.student_id = st.id
+            LEFT JOIN subject_teachers stl ON s.id = stl.subject_id
+            LEFT JOIN teachers t ON stl.teacher_id = t.id
+            WHERE a.deadline < CURRENT_DATE
+              AND NOT EXISTS (
+                  SELECT 1 FROM submissions sub
+                  WHERE sub.student_id = ss.student_id
+                    AND sub.assignment_id = a.id
+                    AND sub.status = 'approved'
+              )
+            ORDER BY a.deadline ASC
+        """)
+        return [dict(row) for row in cur.fetchall()]
+
 @app.get("/api/admin/export/students")
 async def admin_export_students(admin_id = Depends(require_admin)):
     with get_db() as conn:

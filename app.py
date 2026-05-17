@@ -1252,17 +1252,29 @@ async def admin_export_grades(admin_id = Depends(require_admin)):
             LEFT JOIN submissions sub ON sub.student_id = ss.student_id AND sub.assignment_id = a.id
             ORDER BY st.group_name, st.last_name, subj.name, a.title
         """).fetchall()
+    STATUS_RU = {
+        "submitted":     "Отправлено",
+        "in_review":     "На проверке",
+        "approved":      "Зачтено",
+        "rejected":      "Не зачтено",
+        "resubmitted":   "Повторно отправлено",
+        "notebook_sent": "Тетрадь отправлена",
+        "не сдано":      "Не сдано",
+    }
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["ID студента", "Фамилия", "Имя", "Группа", "Предмет", "Задание", "Дедлайн", "Статус", "Дата сдачи"])
     for r in rows:
         deadline = r[6].strftime("%d.%m.%Y") if r[6] else ""
         submitted = r[8].strftime("%d.%m.%Y %H:%M") if r[8] else ""
-        w.writerow([r[0], r[1], r[2], r[3] or "", r[4], r[5], deadline, r[7], submitted])
+        status_ru = STATUS_RU.get(r[7], r[7])
+        w.writerow([r[0], r[1], r[2], r[3] or "", r[4], r[5], deadline, status_ru, submitted])
     buf.seek(0)
+    from urllib.parse import quote
+    fname = quote("успеваемость студентов.csv")
     return StreamingResponse(iter([buf.getvalue().encode("utf-8-sig")]),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=grades.csv"})
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}"})
 
 @app.get("/api/admin/students")
 async def admin_list_students(admin_id = Depends(require_admin)):

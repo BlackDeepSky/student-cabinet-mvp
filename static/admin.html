@@ -183,8 +183,25 @@
       </div>
 
       <div class="section-card">
-        <!-- Вкладки -->
-        <ul class="nav nav-tabs mb-4 flex-nowrap overflow-auto" id="adminTabs" style="-webkit-overflow-scrolling:touch">
+        <!-- Мобильный dropdown (< md) -->
+        <div class="d-md-none mb-3">
+          <button class="btn btn-light w-100 d-flex justify-content-between align-items-center fw-medium border"
+                  id="mobile-section-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <span id="mobile-section-label"><i class="bi bi-people me-2 text-primary"></i>Студенты</span>
+            <i class="bi bi-chevron-down text-muted" style="font-size:.85rem;"></i>
+          </button>
+          <ul class="dropdown-menu w-100 shadow-sm" id="mobile-section-menu">
+            <li><button class="dropdown-item active" type="button" data-target="#tab-students" data-icon="bi-people" data-icon-color="text-primary" data-label="Студенты"><i class="bi bi-people me-2"></i>Студенты</button></li>
+            <li><button class="dropdown-item" type="button" data-target="#tab-teachers" data-icon="bi-person-workspace" data-icon-color="text-success" data-label="Преподаватели"><i class="bi bi-person-workspace me-2"></i>Преподаватели</button></li>
+            <li><button class="dropdown-item" type="button" data-target="#tab-subjects" data-icon="bi-book" data-icon-color="text-purple" data-label="Предметы"><i class="bi bi-book me-2"></i>Предметы</button></li>
+            <li><button class="dropdown-item" type="button" data-target="#tab-assignments" data-icon="bi-journal-text" data-icon-color="text-warning" data-label="Задания"><i class="bi bi-journal-text me-2"></i>Задания</button></li>
+            <li><button class="dropdown-item" type="button" data-target="#tab-announcements" data-icon="bi-megaphone" data-icon-color="text-info" data-label="Объявления"><i class="bi bi-megaphone me-2"></i>Объявления</button></li>
+            <li><button class="dropdown-item" type="button" data-target="#tab-audit" data-icon="bi-journal-text" data-icon-color="text-secondary" data-label="Бэклог"><i class="bi bi-journal-text me-2"></i>Бэклог</button></li>
+          </ul>
+        </div>
+
+        <!-- Вкладки (≥ md) -->
+        <ul class="nav nav-tabs mb-4 flex-nowrap overflow-auto d-none d-md-flex" id="adminTabs" style="-webkit-overflow-scrolling:touch">
           <li class="nav-item flex-shrink-0"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-students"><i class="bi bi-people me-1"></i>Студенты</button></li>
           <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-teachers"><i class="bi bi-person-workspace me-1"></i>Преподаватели</button></li>
           <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-subjects"><i class="bi bi-book me-1"></i>Предметы</button></li>
@@ -889,8 +906,35 @@
       });
     }
 
-    document.getElementById('audit-tab-btn').addEventListener('click', loadAuditLog);
     document.getElementById('audit-refresh-btn').addEventListener('click', loadAuditLog);
+
+    // Mobile dropdown: activate the corresponding Bootstrap tab
+    document.querySelectorAll('#mobile-section-menu .dropdown-item').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const target = this.dataset.target;
+        const tabBtn = document.querySelector(`#adminTabs [data-bs-target="${target}"]`);
+        if (tabBtn) bootstrap.Tab.getOrCreateInstance(tabBtn).show();
+      });
+    });
+
+    // Sync dropdown label whenever any tab becomes active (desktop click OR mobile dropdown)
+    document.querySelectorAll('#adminTabs [data-bs-toggle="tab"]').forEach(tabEl => {
+      tabEl.addEventListener('shown.bs.tab', () => {
+        const target = tabEl.getAttribute('data-bs-target');
+        // Special side-effects
+        if (target === '#tab-audit') loadAuditLog();
+        // Update mobile dropdown
+        const item = document.querySelector(`#mobile-section-menu [data-target="${target}"]`);
+        if (!item) return;
+        const icon = item.dataset.icon;
+        const iconColor = item.dataset.iconColor || '';
+        const label = item.dataset.label;
+        document.getElementById('mobile-section-label').innerHTML =
+          `<i class="bi ${icon} me-2 ${iconColor}"></i>${label}`;
+        document.querySelectorAll('#mobile-section-menu .dropdown-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+      });
+    });
 
     async function loadAll() {
       await Promise.all([loadStudents(), loadTeachers(), loadSubjects(), loadAssignments(), loadStats()]);

@@ -509,11 +509,11 @@
                                         </button>
                                     </div>`;
                             }
+                        } else if (a.status === 'approved') {
+                            // nothing
                         } else if (a.final_grade_blocked) {
                             const statusText = a.final_grade_status ? `Оценка выставлена: ${a.final_grade_status}.` : 'Оценка по предмету уже выставлена.';
                             actionBlock = `<p class="text-muted mb-0 mt-2" style="font-size:.875rem">${statusText} Повторная сдача недоступна.</p>`;
-                        } else if (a.status === 'approved') {
-                            // nothing
                         } else if (a.status === 'in_review') {
                             actionBlock = '<p class="text-muted mb-0 mt-2" style="font-size:.875rem"><i class="bi bi-hourglass-split me-1"></i>Работа проверяется преподавателем</p>';
                         } else {

@@ -1185,13 +1185,17 @@ async def admin_pending_details(admin_id = Depends(require_admin)):
                 a.submission_type,
                 sub.status,
                 sub.submitted_at,
-                COALESCE(t.last_name || ' ' || t.first_name, '—') AS teacher_name
+                COALESCE(
+                    (SELECT t2.last_name || ' ' || t2.first_name
+                     FROM subject_teachers stl2
+                     JOIN teachers t2 ON t2.id = stl2.teacher_id
+                     WHERE stl2.subject_id = s.id
+                     LIMIT 1),
+                '—') AS teacher_name
             FROM submissions sub
             JOIN assignments a ON sub.assignment_id = a.id
             JOIN subjects s ON a.subject_id = s.id
             JOIN students st ON sub.student_id = st.id
-            LEFT JOIN subject_teachers stl ON s.id = stl.subject_id
-            LEFT JOIN teachers t ON stl.teacher_id = t.id
             WHERE sub.status IN ('submitted', 'in_review', 'resubmitted', 'notebook_sent')
             ORDER BY sub.submitted_at ASC NULLS LAST
         """)
@@ -1207,13 +1211,17 @@ async def admin_overdue_details(admin_id = Depends(require_admin)):
                 s.name AS subject,
                 a.title AS assignment_title,
                 a.deadline,
-                COALESCE(t.last_name || ' ' || t.first_name, '—') AS teacher_name
+                COALESCE(
+                    (SELECT t2.last_name || ' ' || t2.first_name
+                     FROM subject_teachers stl2
+                     JOIN teachers t2 ON t2.id = stl2.teacher_id
+                     WHERE stl2.subject_id = s.id
+                     LIMIT 1),
+                '—') AS teacher_name
             FROM student_subjects ss
             JOIN assignments a ON a.subject_id = ss.subject_id
             JOIN subjects s ON a.subject_id = s.id
             JOIN students st ON ss.student_id = st.id
-            LEFT JOIN subject_teachers stl ON s.id = stl.subject_id
-            LEFT JOIN teachers t ON stl.teacher_id = t.id
             WHERE a.deadline < CURRENT_DATE
               AND NOT EXISTS (
                   SELECT 1 FROM submissions sub

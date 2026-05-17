@@ -87,6 +87,21 @@
     .table { margin-bottom: 0; }
     .toast-container { z-index: 9999; }
     .history-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,.09); }
+
+    .stat-card { background:#fff; border-radius:12px; padding:1.1rem 1rem; box-shadow:0 1px 6px rgba(0,0,0,.07); text-align:center; height:100%; }
+    .stat-icon { width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin:0 auto .5rem; }
+    .stat-green  { background:#d1fae5;color:#059669; }
+    .stat-yellow { background:#fef3c7;color:#d97706; }
+    .stat-red    { background:#fee2e2;color:#dc2626; }
+    .stat-value  { font-size:1.6rem;font-weight:700;line-height:1.1;margin-bottom:.12rem; }
+    .stat-label  { font-size:.76rem;color:#6c757d;font-weight:500; }
+    .stat-card-clickable { cursor:pointer;transition:box-shadow .15s,transform .1s; }
+    .stat-card-clickable:hover { box-shadow:0 4px 16px rgba(0,0,0,.12);transform:translateY(-2px); }
+
+    .sub-card { background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.07);overflow:hidden;height:100%;display:flex;flex-direction:column;transition:box-shadow .15s; }
+    .sub-card:hover { box-shadow:0 3px 14px rgba(0,0,0,.10); }
+    .sub-card-strip { height:4px;flex-shrink:0; }
+    .sub-card-body { padding:.9rem 1rem;flex:1;display:flex;flex-direction:column; }
   </style>
 </head>
 <body>
@@ -138,38 +153,75 @@
   <!-- Main -->
   <div id="main-section" style="display:none">
     <div class="container py-4">
+
+      <!-- Дашборд -->
+      <div class="row g-3 mb-4">
+        <div class="col-4">
+          <div class="stat-card stat-card-clickable" id="tc-pending-card" title="Показать работы на проверке">
+            <div class="stat-icon stat-yellow"><i class="bi bi-hourglass-split"></i></div>
+            <div class="stat-value text-warning" id="tc-stat-pending">—</div>
+            <div class="stat-label">На проверке <i class="bi bi-chevron-right" style="font-size:.65rem;opacity:.5;"></i></div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="stat-card stat-card-clickable" id="tc-overdue-card" title="Показать просроченные">
+            <div class="stat-icon stat-red"><i class="bi bi-exclamation-triangle-fill"></i></div>
+            <div class="stat-value text-danger" id="tc-stat-overdue">—</div>
+            <div class="stat-label">Просрочено <i class="bi bi-chevron-right" style="font-size:.65rem;opacity:.5;"></i></div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="stat-card">
+            <div class="stat-icon stat-green"><i class="bi bi-book-fill"></i></div>
+            <div class="stat-value text-success" id="tc-stat-subjects">—</div>
+            <div class="stat-label">Предметов</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Работы студентов -->
       <div class="section-card">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
           <h6 class="mb-0 fw-bold text-uppercase text-muted" style="letter-spacing:.06em;font-size:.8rem">
             <i class="bi bi-journal-text me-2"></i>Работы студентов
           </h6>
           <div class="d-flex gap-2 flex-wrap">
             <button id="show-progress-btn" class="btn btn-outline-primary btn-sm">
-              <i class="bi bi-bar-chart-line me-1"></i>Прогресс студентов
+              <i class="bi bi-bar-chart-line me-1"></i><span class="d-none d-sm-inline">Прогресс студентов</span><span class="d-sm-none">Прогресс</span>
             </button>
             <button id="show-history-btn" class="btn btn-outline-secondary btn-sm">
-              <i class="bi bi-clock-history me-1"></i>История зачтённых
+              <i class="bi bi-clock-history me-1"></i><span class="d-none d-sm-inline">История зачтённых</span><span class="d-sm-none">История</span>
             </button>
           </div>
         </div>
 
-        <div class="table-responsive mt-3">
-          <table class="table table-hover align-middle">
-            <thead class="table-light">
-              <tr>
-                <th>Студент</th>
-                <th class="d-none d-md-table-cell">Предмет</th>
-                <th>Задание</th>
-                <th>Статус</th>
-                <th class="d-none d-md-table-cell">Дата</th>
-                <th>Файлы</th>
-                <th>Действие</th>
-              </tr>
-            </thead>
-            <tbody id="submissions"></tbody>
-          </table>
+        <!-- Фильтры -->
+        <div class="d-flex gap-2 flex-wrap mb-3 align-items-center">
+          <select id="filter-subject" class="form-select form-select-sm" style="max-width:200px;min-width:110px;">
+            <option value="">Все предметы</option>
+          </select>
+          <select id="filter-status" class="form-select form-select-sm" style="max-width:185px;min-width:110px;">
+            <option value="">Все статусы</option>
+            <option value="pending">На проверке</option>
+            <option value="overdue">Просрочено</option>
+            <option value="approved">Зачтено</option>
+            <option value="rejected">Не зачтено</option>
+            <option value="not_submitted">Не сдано</option>
+          </select>
+          <button class="btn btn-sm btn-outline-secondary" id="refresh-btn" title="Обновить">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+          <span class="text-muted ms-1" id="filter-count" style="font-size:.82rem;"></span>
+        </div>
+
+        <!-- Карточки -->
+        <div class="row g-3" id="submissions-cards"></div>
+        <div id="submissions-empty" style="display:none" class="text-center py-5 text-muted">
+          <i class="bi bi-inbox" style="font-size:2.5rem;opacity:.4;"></i>
+          <p class="mt-2 mb-0">Нет работ</p>
         </div>
       </div>
+
     </div>
   </div>
 
@@ -187,8 +239,11 @@
   <div class="modal fade" id="gradeModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Выставить статус</h5>
+        <div class="modal-header border-0 pb-1">
+          <div>
+            <h5 class="modal-title fw-bold mb-0">Выставить статус</h5>
+            <p class="text-muted small mb-0 mt-1" id="grade-modal-context"></p>
+          </div>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
@@ -412,6 +467,7 @@
       if (token && name) {
         document.getElementById('teacher-name-nav').textContent = name;
         loadSubmissions();
+        loadTeacherStats();
         showMain();
         updateBadge();
       } else {
@@ -443,6 +499,7 @@
         localStorage.setItem('teacher_name', fullName);
         document.getElementById('teacher-name-nav').textContent = fullName;
         loadSubmissions();
+        loadTeacherStats();
         showMain();
         updateBadge();
       } catch (err) {
@@ -459,6 +516,38 @@
       showLogin();
     });
 
+    let allSubmissions = [];
+
+    const STRIP_COLORS = { submitted:'#adb5bd', in_review:'#ffc107', resubmitted:'#0d6efd', notebook_sent:'#0dcaf0', approved:'#198754', rejected:'#dc3545' };
+    const STATUS_BADGE = {
+      submitted:     '<span class="badge" style="background:#e9ecef;color:#495057;font-weight:500;">Отправлено</span>',
+      in_review:     '<span class="badge" style="background:#fff3cd;color:#856404;font-weight:500;">На проверке</span>',
+      resubmitted:   '<span class="badge" style="background:#cfe2ff;color:#084298;font-weight:500;">Повторно</span>',
+      notebook_sent: '<span class="badge" style="background:#d0f4f5;color:#055160;font-weight:500;">Тетрадь отправлена</span>',
+      approved:      '<span class="badge" style="background:#d1e7dd;color:#0a3622;font-weight:500;">Зачтено</span>',
+      rejected:      '<span class="badge" style="background:#f8d7da;color:#58151c;font-weight:500;">Не зачтено</span>',
+    };
+
+    async function loadTeacherStats() {
+      const res = await fetch('/api/teacher/stats/me', { headers: getAuthHeaders() });
+      if (!res.ok) return;
+      const d = await res.json();
+      document.getElementById('tc-stat-pending').textContent = d.pending;
+      document.getElementById('tc-stat-overdue').textContent = d.overdue;
+      document.getElementById('tc-stat-subjects').textContent = d.subjects;
+    }
+
+    document.getElementById('tc-pending-card').addEventListener('click', () => {
+      document.getElementById('filter-status').value = 'pending';
+      renderSubmissionCards();
+      document.querySelector('.section-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    document.getElementById('tc-overdue-card').addEventListener('click', () => {
+      document.getElementById('filter-status').value = 'overdue';
+      renderSubmissionCards();
+      document.querySelector('.section-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
     async function loadSubmissions() {
       try {
         const res = await fetch('/api/teacher/assignments/me', { headers: getAuthHeaders() });
@@ -466,129 +555,171 @@
           localStorage.removeItem('teacher_token'); localStorage.removeItem('teacher_name'); showLogin(); return;
         }
         if (!res.ok) throw new Error('Ошибка загрузки работ');
-        const submissions = await res.json();
-        submissions.sort((a, b) => deadlineSortKey(a.deadline) - deadlineSortKey(b.deadline));
-        const tbody = document.getElementById('submissions');
-        tbody.innerHTML = '';
+        allSubmissions = await res.json();
+        allSubmissions.sort((a, b) => deadlineSortKey(a.deadline) - deadlineSortKey(b.deadline));
 
-        if (submissions.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" class="text-muted text-center">Нет работ для проверки</td></tr>';
-          return;
-        }
-
-        submissions.forEach(row => {
-          const statusClassMap = { submitted: 'status-submitted', in_review: 'status-in_review', approved: 'status-approved', rejected: 'status-rejected', resubmitted: 'status-rejected', notebook_sent: 'status-in_review' };
-          const cls = statusClassMap[row.last_status] || 'status-submitted';
-          const statusBadge = row.last_status_label ? `<span class="status-badge ${cls}">${row.last_status_label}</span>` : '<span class="status-badge status-submitted">Не отмечено</span>';
-          const lastAction = row.last_action_at
-            ? new Date(row.last_action_at).toLocaleString('ru-RU')
-            : (row.submitted_at ? new Date(row.submitted_at).toLocaleString('ru-RU') + ' (отправлена)' : '—');
-          const isNotebook = row.submission_type === 'notebook';
-          const typeIcon = isNotebook ? '<i class="bi bi-book text-secondary ms-1" title="В тетради"></i>' : '';
-
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${escapeHtml(row.student_name)}<br><small class="text-muted">${escapeHtml(row.student_id)}</small></td>
-            <td class="d-none d-md-table-cell">${escapeHtml(row.subject)}</td>
-            <td>${escapeHtml(row.title)}${typeIcon}<br>${deadlineBadge(row.deadline)}</td>
-            <td>${statusBadge}</td>
-            <td class="d-none d-md-table-cell"><small>${lastAction}</small></td>
-            <td>
-              ${isNotebook ? '<span class="text-muted" style="font-size:.8rem"><i class="bi bi-envelope me-1"></i>Почтой</span>' : `<button class="btn btn-sm btn-outline-primary view-files"
-                      data-assignment-id="${row.assignment_id}"
-                      data-student-id="${escapeHtml(row.student_id)}">
-                <i class="bi bi-paperclip"></i>
-              </button>`}
-            </td>
-            <td class="d-flex gap-1 flex-wrap">
-              <button class="btn btn-sm btn-outline-success set-grade"
-                      data-student-id="${escapeHtml(row.student_id)}"
-                      data-subject-name="${escapeHtml(row.subject)}"
-                      data-assignment-id="${row.assignment_id}"
-                      data-submission-type="${escapeHtml(row.submission_type || 'electronic')}"
-                      title="Выставить статус">
-                <i class="bi bi-pencil-square"></i>
-              </button>
-              <button class="btn btn-sm btn-outline-primary send-msg-btn"
-                      data-student-db-id="${row.student_db_id}"
-                      data-student-name="${escapeHtml(row.student_name)}"
-                      title="Написать студенту">
-                <i class="bi bi-envelope"></i>
-              </button>
-            </td>`;
-          tbody.appendChild(tr);
+        const subjectFilter = document.getElementById('filter-subject');
+        const saved = subjectFilter.value;
+        subjectFilter.innerHTML = '<option value="">Все предметы</option>';
+        [...new Set(allSubmissions.map(s => s.subject).filter(Boolean))].sort().forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s; opt.textContent = s;
+          if (s === saved) opt.selected = true;
+          subjectFilter.appendChild(opt);
         });
 
-        document.querySelectorAll('.view-files').forEach(btn => {
-          btn.addEventListener('click', async (e) => {
-            const b = e.currentTarget;
-            const res = await fetch(`/api/teacher/files/${b.dataset.assignmentId}/${b.dataset.studentId}`, { headers: getAuthHeaders() });
-            const files = await res.json();
-            const filesList = document.getElementById('files-list');
-            filesList.innerHTML = files.length === 0 ? '<p class="text-muted">Файлы не найдены</p>' : '';
-            files.forEach(f => {
-              const button = document.createElement('button');
-              button.className = 'btn btn-sm btn-outline-secondary w-100 mb-2';
-              button.innerHTML = `<i class="bi bi-paperclip me-1"></i>${f.name}`;
-              button.onclick = async () => {
-                try {
-                  const res = await fetch(`/download/${f.path}`, { headers: getAuthHeaders() });
-                  if (!res.ok) throw new Error('Ошибка скачивания');
-                  const blob = await res.blob();
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url; a.download = f.name;
-                  document.body.appendChild(a); a.click();
-                  window.URL.revokeObjectURL(url); a.remove();
-                } catch (err) { showToast('Не удалось скачать файл: ' + err.message, 'danger'); }
-              };
-              filesList.appendChild(button);
-            });
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
-          });
-        });
-
-        document.querySelectorAll('.send-msg-btn').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            const b = e.currentTarget;
-            document.getElementById('msg-student-db-id').value = b.dataset.studentDbId;
-            document.getElementById('msg-student-label').textContent = `Получатель: ${b.dataset.studentName}`;
-            document.getElementById('teacher-msg-form').reset();
-            document.getElementById('msg-student-db-id').value = b.dataset.studentDbId;
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('sendMsgModal')).show();
-          });
-        });
-
-        document.querySelectorAll('.set-grade').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            const b = e.currentTarget;
-            document.getElementById('modal-student-id').value = b.dataset.studentId;
-            document.getElementById('modal-subject-name').value = b.dataset.subjectName;
-            document.getElementById('modal-assignment-id').value = b.dataset.assignmentId;
-            document.getElementById('review').value = '';
-            document.getElementById('feedback-file').value = '';
-            document.getElementById('feedback-file-block').style.display = 'none';
-            const isNotebook = b.dataset.submissionType === 'notebook';
-            const statusSelect = document.getElementById('status-input');
-            statusSelect.innerHTML = isNotebook
-              ? `<option value="получена">Получена</option>
-                 <option value="зачёт">Зачтено</option>
-                 <option value="не зачтено">Не зачтено</option>`
-              : `<option value="принят на рассмотрение">Принят на рассмотрение</option>
-                 <option value="зачёт">Зачёт</option>
-                 <option value="не зачтено">Не зачтено</option>`;
-            statusSelect.onchange = () => {
-              document.getElementById('feedback-file-block').style.display = (!isNotebook && statusSelect.value === 'не зачтено') ? 'block' : 'none';
-              if (statusSelect.value !== 'не зачтено') document.getElementById('feedback-file').value = '';
-            };
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('gradeModal')).show();
-          });
-        });
+        renderSubmissionCards();
       } catch (err) {
         console.error('Ошибка при загрузке работ:', err);
         localStorage.removeItem('teacher_token'); showLogin();
       }
     }
+
+    function renderSubmissionCards() {
+      const subject = document.getElementById('filter-subject').value;
+      const status  = document.getElementById('filter-status').value;
+
+      const filtered = allSubmissions.filter(row => {
+        if (subject && row.subject !== subject) return false;
+        if (status === 'pending')       return ['submitted','in_review','resubmitted','notebook_sent'].includes(row.last_status);
+        if (status === 'overdue')       return deadlineSortKey(row.deadline) < 0 && row.last_status !== 'approved';
+        if (status === 'approved')      return row.last_status === 'approved';
+        if (status === 'rejected')      return row.last_status === 'rejected';
+        if (status === 'not_submitted') return !row.last_status;
+        return true;
+      });
+
+      const container = document.getElementById('submissions-cards');
+      const empty     = document.getElementById('submissions-empty');
+      container.innerHTML = '';
+      document.getElementById('filter-count').textContent = filtered.length ? `${filtered.length} работ` : '';
+
+      if (filtered.length === 0) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+
+      filtered.forEach(row => {
+        const strip  = STRIP_COLORS[row.last_status] || '#e9ecef';
+        const badge  = row.last_status ? (STATUS_BADGE[row.last_status] || `<span class="badge bg-secondary">${escapeHtml(row.last_status_label || row.last_status)}</span>`) : '<span class="badge" style="background:#e9ecef;color:#6c757d;font-weight:500;">Не сдано</span>';
+        const isNb   = row.submission_type === 'notebook';
+        const typeBadge = isNb
+          ? `<span class="badge rounded-pill" style="background:#fff3cd;color:#856404;border:1px solid #ffc107;font-size:.68rem;"><i class="bi bi-book me-1"></i>Тетрадь</span>`
+          : `<span class="badge rounded-pill" style="background:#cfe2ff;color:#084298;border:1px solid #9ec5fe;font-size:.68rem;"><i class="bi bi-file-earmark-text me-1"></i>Эл.</span>`;
+        const filesEl = isNb
+          ? `<span class="text-muted" style="font-size:.8rem;"><i class="bi bi-envelope me-1"></i>Почтой</span>`
+          : `<button class="btn btn-sm btn-outline-primary view-files" data-assignment-id="${row.assignment_id}" data-student-id="${escapeHtml(row.student_id)}" title="Файлы"><i class="bi bi-paperclip"></i></button>`;
+
+        const col = document.createElement('div');
+        col.className = 'col-12 col-md-6 col-xl-4';
+        col.innerHTML = `
+          <div class="sub-card">
+            <div class="sub-card-strip" style="background:${strip};"></div>
+            <div class="sub-card-body">
+              <div class="d-flex justify-content-between align-items-start mb-2 gap-2">
+                <div style="min-width:0;">
+                  <div class="fw-semibold text-truncate">${escapeHtml(row.student_name)}</div>
+                  <div class="text-muted" style="font-size:.78rem;">${escapeHtml(row.student_id)}</div>
+                </div>
+                <div class="d-flex flex-column align-items-end gap-1 flex-shrink-0">
+                  ${badge}${typeBadge}
+                </div>
+              </div>
+              <div class="mb-2" style="font-size:.83rem;">
+                <span class="text-muted">${escapeHtml(row.subject)}</span>
+                <span class="mx-1 text-muted">·</span>
+                <span class="fw-medium">${escapeHtml(row.title)}</span>
+              </div>
+              <div class="mb-3">${deadlineBadge(row.deadline)}</div>
+              <div class="mt-auto d-flex gap-2 pt-2 border-top align-items-center">
+                ${filesEl}
+                <div class="ms-auto d-flex gap-1">
+                  <button class="btn btn-sm btn-outline-success set-grade"
+                    data-student-id="${escapeHtml(row.student_id)}"
+                    data-subject-name="${escapeHtml(row.subject)}"
+                    data-assignment-id="${row.assignment_id}"
+                    data-submission-type="${escapeHtml(row.submission_type || 'electronic')}"
+                    data-student-name="${escapeHtml(row.student_name)}"
+                    data-assignment-title="${escapeHtml(row.title)}"
+                    title="Выставить статус">
+                    <i class="bi bi-pencil-square"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-primary send-msg-btn"
+                    data-student-db-id="${row.student_db_id}"
+                    data-student-name="${escapeHtml(row.student_name)}"
+                    title="Написать студенту">
+                    <i class="bi bi-envelope"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>`;
+        container.appendChild(col);
+      });
+
+      container.querySelectorAll('.view-files').forEach(btn => {
+        btn.addEventListener('click', async e => {
+          const b = e.currentTarget;
+          const r = await fetch(`/api/teacher/files/${b.dataset.assignmentId}/${b.dataset.studentId}`, { headers: getAuthHeaders() });
+          const files = await r.json();
+          const filesList = document.getElementById('files-list');
+          filesList.innerHTML = files.length === 0 ? '<p class="text-muted">Файлы не найдены</p>' : '';
+          files.forEach(f => {
+            const btn2 = document.createElement('button');
+            btn2.className = 'btn btn-sm btn-outline-secondary w-100 mb-2';
+            btn2.innerHTML = `<i class="bi bi-paperclip me-1"></i>${escapeHtml(f.name)}`;
+            btn2.onclick = async () => {
+              try {
+                const r2 = await fetch(`/download/${f.path}`, { headers: getAuthHeaders() });
+                if (!r2.ok) throw new Error();
+                const blob = await r2.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = f.name;
+                document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); a.remove();
+              } catch { showToast('Не удалось скачать файл', 'danger'); }
+            };
+            filesList.appendChild(btn2);
+          });
+          bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
+        });
+      });
+
+      container.querySelectorAll('.send-msg-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+          const b = e.currentTarget;
+          document.getElementById('msg-student-db-id').value = b.dataset.studentDbId;
+          document.getElementById('msg-student-label').textContent = `Получатель: ${b.dataset.studentName}`;
+          document.getElementById('teacher-msg-form').reset();
+          document.getElementById('msg-student-db-id').value = b.dataset.studentDbId;
+          bootstrap.Modal.getOrCreateInstance(document.getElementById('sendMsgModal')).show();
+        });
+      });
+
+      container.querySelectorAll('.set-grade').forEach(btn => {
+        btn.addEventListener('click', e => {
+          const b = e.currentTarget;
+          document.getElementById('modal-student-id').value = b.dataset.studentId;
+          document.getElementById('modal-subject-name').value = b.dataset.subjectName;
+          document.getElementById('modal-assignment-id').value = b.dataset.assignmentId;
+          document.getElementById('grade-modal-context').textContent = `${b.dataset.studentName} · ${b.dataset.assignmentTitle}`;
+          document.getElementById('review').value = '';
+          document.getElementById('feedback-file').value = '';
+          document.getElementById('feedback-file-block').style.display = 'none';
+          const isNb2 = b.dataset.submissionType === 'notebook';
+          const sel = document.getElementById('status-input');
+          sel.innerHTML = isNb2
+            ? `<option value="получена">Получена</option><option value="зачёт">Зачтено</option><option value="не зачтено">Не зачтено</option>`
+            : `<option value="принят на рассмотрение">Принят на рассмотрение</option><option value="зачёт">Зачёт</option><option value="не зачтено">Не зачтено</option>`;
+          sel.onchange = () => {
+            document.getElementById('feedback-file-block').style.display = (!isNb2 && sel.value === 'не зачтено') ? 'block' : 'none';
+            if (sel.value !== 'не зачтено') document.getElementById('feedback-file').value = '';
+          };
+          bootstrap.Modal.getOrCreateInstance(document.getElementById('gradeModal')).show();
+        });
+      });
+    }
+
+    document.getElementById('filter-subject').addEventListener('change', renderSubmissionCards);
+    document.getElementById('filter-status').addEventListener('change', renderSubmissionCards);
+    document.getElementById('refresh-btn').addEventListener('click', () => { loadSubmissions(); loadTeacherStats(); });
 
     async function loadHistory() {
       try {
@@ -750,6 +881,7 @@
       showToast('Статус сохранён');
       bootstrap.Modal.getInstance(document.getElementById('gradeModal')).hide();
       loadSubmissions();
+      loadTeacherStats();
     });
 
     document.getElementById('cp-submit-btn').addEventListener('click', async () => {

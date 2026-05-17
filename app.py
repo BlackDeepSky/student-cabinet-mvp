@@ -767,6 +767,40 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
             })
         return result
 
+@app.get("/api/teacher/stats/me")
+async def get_teacher_stats(session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "teacher":
+        raise HTTPException(403, "Доступ запрещён")
+    with get_db() as conn:
+        pending = conn.execute("""
+            SELECT COUNT(*) FROM submissions sub
+            JOIN assignments a ON sub.assignment_id = a.id
+            JOIN subject_teachers st ON a.subject_id = st.subject_id
+            WHERE st.teacher_id = %s
+              AND sub.status IN ('submitted','in_review','resubmitted','notebook_sent')
+        """, (user_id,)).fetchone()[0]
+        overdue = conn.execute("""
+            SELECT COUNT(*) FROM (
+                SELECT ss.student_id, a.id
+                FROM student_subjects ss
+                JOIN assignments a ON a.subject_id = ss.subject_id
+                JOIN subject_teachers st ON a.subject_id = st.subject_id
+                WHERE st.teacher_id = %s
+                  AND a.deadline < CURRENT_DATE
+                  AND NOT EXISTS (
+                      SELECT 1 FROM submissions sub
+                      WHERE sub.student_id = ss.student_id
+                        AND sub.assignment_id = a.id
+                        AND sub.status = 'approved'
+                  )
+            ) t
+        """, (user_id,)).fetchone()[0]
+        subjects = conn.execute(
+            "SELECT COUNT(*) FROM subject_teachers WHERE teacher_id = %s", (user_id,)
+        ).fetchone()[0]
+    return {"pending": pending, "overdue": overdue, "subjects": subjects}
+
 @app.get("/api/teacher/history/me")
 async def get_my_teacher_history(session = Depends(require_auth)):
     user_id, user_type = session

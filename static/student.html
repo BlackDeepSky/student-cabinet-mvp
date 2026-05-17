@@ -71,36 +71,35 @@
             .login-card h2 { text-align: center; font-size: 1.4rem; font-weight: 700; margin-bottom: .25rem; letter-spacing: -0.01em; }
             .login-card .login-sub { text-align: center; color: var(--brand); font-size: 1rem; font-weight: 600; margin-bottom: 1.5rem; }
 
-            /* Status badges */
-            .status-badge {
-                font-size: 0.8em;
-                padding: 0.2em 0.55em;
-                border-radius: 0.25rem;
-                margin-left: 6px;
-                vertical-align: middle;
-                font-weight: 500;
-            }
-            .status-submitted  { background: #e9ecef; color: #495057; }
-            .status-in_review  { background: #fff3cd; color: #856404; }
-            .status-approved   { background: #d1e7dd; color: #0a3622; }
-            .status-rejected   { background: #f8d7da; color: #58151c; }
-
             /* Cards */
             .assignment-card {
                 border: none;
-                border-left: 4px solid #dee2e6;
                 border-radius: 12px;
                 box-shadow: 0 1px 6px rgba(0,0,0,.07);
                 margin-bottom: 1rem;
                 transition: box-shadow .15s;
+                overflow: hidden;
             }
             .assignment-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.12); }
-            .assignment-card.card-status-approved    { border-left-color: #198754; }
-            .assignment-card.card-status-in_review   { border-left-color: #f59e0b; }
-            .assignment-card.card-status-rejected    { border-left-color: #dc3545; }
-            .assignment-card.card-status-resubmitted { border-left-color: #dc3545; }
-            .assignment-card.card-status-submitted   { border-left-color: #6c757d; }
-            .assignment-card.card-status-pending     { border-left-color: var(--brand); }
+
+            /* Status strip */
+            .card-status-strip {
+                padding: 0.45rem 1rem;
+                font-size: 0.82rem;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+                color: #fff;
+            }
+            .card-status-strip.strip-approved     { background: #198754; }
+            .card-status-strip.strip-in_review    { background: #e09a00; }
+            .card-status-strip.strip-rejected     { background: #dc3545; }
+            .card-status-strip.strip-resubmitted  { background: #dc3545; }
+            .card-status-strip.strip-submitted    { background: #6c757d; }
+            .card-status-strip.strip-notebook_sent{ background: #0891b2; }
+            .card-status-strip.strip-pending      { background: #dee2e6; color: #6c757d; }
+
             .assignment-card .subject-label {
                 font-size: .8rem;
                 font-weight: 600;
@@ -470,14 +469,17 @@
                         const dateStr = submittedAt ? ` (${submittedAt})` : '';
 
                         const isNotebook = a.submission_type === 'notebook';
-                        const classMap = { submitted: 'status-submitted', in_review: 'status-in_review', approved: 'status-approved', rejected: 'status-rejected', resubmitted: 'status-rejected', notebook_sent: 'status-in_review' };
-                        let statusBadge = '';
-                        if (a.status_label && a.status_label !== '—') {
-                            const displayLabel = (isNotebook && a.status === 'in_review') ? 'Получена преподавателем' : a.status_label;
-                            statusBadge = `<span class="status-badge ${classMap[a.status] || 'status-submitted'}">${displayLabel}${dateStr}</span>`;
-                        } else {
-                            statusBadge = `<span class="status-badge status-submitted">${isNotebook ? 'Нет в кабинете' : 'Не отправлено'}</span>`;
-                        }
+                        const statusCfgMap = {
+                            approved:      { icon: 'bi-check-circle-fill',    cls: 'strip-approved',      label: 'Зачтено' },
+                            in_review:     { icon: 'bi-hourglass-split',       cls: 'strip-in_review',     label: isNotebook ? 'Получена преподавателем' : 'На проверке' },
+                            rejected:      { icon: 'bi-x-circle-fill',         cls: 'strip-rejected',      label: 'Отклонено' },
+                            resubmitted:   { icon: 'bi-arrow-repeat',          cls: 'strip-resubmitted',   label: 'Повторная сдача' },
+                            submitted:     { icon: 'bi-cloud-check-fill',      cls: 'strip-submitted',     label: 'Отправлено' },
+                            notebook_sent: { icon: 'bi-envelope-check-fill',   cls: 'strip-notebook_sent', label: 'Тетрадь отправлена' },
+                        };
+                        const stripCfg = statusCfgMap[a.status] || { icon: 'bi-clock', cls: 'strip-pending', label: isNotebook ? 'Нет в кабинете' : 'Не отправлено' };
+                        const stripDate = submittedAt ? ` · ${submittedAt}` : '';
+                        const statusStrip = `<div class="card-status-strip ${stripCfg.cls}"><i class="bi ${stripCfg.icon}"></i>${stripCfg.label}${stripDate}</div>`;
 
                         let reviewBlock = '';
                         if ((a.status === 'rejected' || a.status === 'resubmitted') && a.review) {
@@ -534,10 +536,11 @@
                         const el = document.createElement('div');
                         el.className = `assignment-card card card-status-${a.status || 'pending'}`;
                         el.innerHTML = `
+                            ${statusStrip}
                             <div class="card-body">
                                 <div class="subject-label">${escapeHtml(a.subject)}</div>
                                 <div class="teacher-label"><i class="bi bi-person me-1"></i>${escapeHtml(a.teachers)}</div>
-                                <h6 class="mb-1">${escapeHtml(a.title)} ${statusBadge}</h6>
+                                <h6 class="mb-1">${escapeHtml(a.title)}</h6>
                                 <p class="text-muted mb-2" style="font-size:.9rem">${escapeHtml(a.description)}</p>
                                 <div class="mb-1">${deadline}</div>
                                 ${reviewBlock}

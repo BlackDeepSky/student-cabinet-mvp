@@ -782,17 +782,22 @@ async def get_teacher_stats(session = Depends(require_auth)):
         """, (user_id,)).fetchone()[0]
         overdue = conn.execute("""
             SELECT COUNT(*) FROM (
-                SELECT ss.student_id, a.id
-                FROM student_subjects ss
-                JOIN assignments a ON a.subject_id = ss.subject_id
-                JOIN subject_teachers st ON a.subject_id = st.subject_id
-                WHERE st.teacher_id = %s
+                SELECT a.id, st.id
+                FROM assignments a
+                JOIN subjects s ON a.subject_id = s.id
+                JOIN subject_teachers st_link ON s.id = st_link.subject_id
+                JOIN student_subjects ss ON ss.subject_id = s.id
+                JOIN students st ON ss.student_id = st.id
+                LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.student_id = st.id
+                WHERE st_link.teacher_id = %s
                   AND a.deadline < CURRENT_DATE
-                  AND NOT EXISTS (
-                      SELECT 1 FROM submissions sub
-                      WHERE sub.student_id = ss.student_id
-                        AND sub.assignment_id = a.id
-                        AND sub.status = 'approved'
+                  AND (
+                      (COALESCE(a.submission_type, 'electronic') = 'electronic'
+                       AND sub.id IS NOT NULL
+                       AND (sub.status IS NULL OR sub.status NOT IN ('approved')))
+                      OR
+                      (a.submission_type = 'notebook'
+                       AND (sub.status IS NULL OR sub.status NOT IN ('approved')))
                   )
             ) t
         """, (user_id,)).fetchone()[0]

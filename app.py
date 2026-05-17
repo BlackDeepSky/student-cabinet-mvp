@@ -780,6 +780,7 @@ async def get_my_teacher_history(session = Depends(require_auth)):
                 st.student_id,
                 s.name AS subject,
                 a.title AS assignment_title,
+                a.submission_type,
                 g.graded_at,
                 a.id AS assignment_id
             FROM grades g

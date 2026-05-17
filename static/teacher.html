@@ -86,6 +86,7 @@
     }
     .table { margin-bottom: 0; }
     .toast-container { z-index: 9999; }
+    .history-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,.09); }
   </style>
 </head>
 <body>
@@ -289,22 +290,23 @@
 
   <!-- Modal: история -->
   <div class="modal fade" id="historyModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>История зачтённых работ</h5>
+        <div class="modal-header border-0 pb-1">
+          <div>
+            <h5 class="modal-title fw-bold mb-0">
+              <i class="bi bi-check-circle-fill text-success me-2"></i>История зачтённых работ
+            </h5>
+            <p class="text-muted small mb-0 mt-1">Работы, принятые вами по всем предметам</p>
+          </div>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
-          <div class="table-responsive">
-            <table class="table table-bordered">
-              <thead class="table-light">
-                <tr><th>Студент</th><th>Предмет</th><th>Задание</th><th>Дата зачёта</th></tr>
-              </thead>
-              <tbody id="history-rows"></tbody>
-            </table>
+        <div class="modal-body pt-2">
+          <div id="history-list"></div>
+          <div id="history-empty" style="display:none;" class="text-center py-5 text-muted">
+            <i class="bi bi-inbox" style="font-size:2.5rem;opacity:.4;"></i>
+            <p class="mt-2 mb-0">Нет зачтённых работ</p>
           </div>
-          <p class="text-muted text-center" id="history-empty" style="display:none;">Нет зачтённых работ</p>
         </div>
       </div>
     </div>
@@ -594,30 +596,45 @@
         if (res.status === 401 || res.status === 403) { localStorage.removeItem('teacher_token'); localStorage.removeItem('teacher_name'); showLogin(); return; }
         if (!res.ok) throw new Error('Ошибка загрузки истории');
         const history = await res.json();
-        const tbody = document.getElementById('history-rows');
+        const list = document.getElementById('history-list');
         const emptyMsg = document.getElementById('history-empty');
-        tbody.innerHTML = '';
-        if (history.length === 0) { emptyMsg.style.display = 'block'; }
-        else {
+        list.innerHTML = '';
+        if (history.length === 0) {
+          emptyMsg.style.display = 'block';
+        } else {
           emptyMsg.style.display = 'none';
           history.forEach(item => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${escapeHtml(item.student_name)}<br><small class="text-muted">${escapeHtml(item.student_id)}</small></td>
-              <td>${escapeHtml(item.subject)}</td>
-              <td>${escapeHtml(item.assignment_title)}</td>
-              <td>
-                ${new Date(item.graded_at).toLocaleString('ru-RU')}
-                <br>
-                <button class="btn btn-sm btn-outline-primary mt-1 history-view-files"
-                        data-assignment-id="${item.assignment_id}"
-                        data-student-id="${escapeHtml(item.student_id)}">
-                  <i class="bi bi-paperclip me-1"></i>Файлы
-                </button>
-              </td>`;
-            tbody.appendChild(tr);
+            const isNotebook = item.submission_type === 'notebook';
+            const typeBadge = isNotebook
+              ? `<span class="badge rounded-pill" style="background:#fff3cd;color:#856404;border:1px solid #ffc107;font-weight:500;font-size:.72rem;"><i class="bi bi-book me-1"></i>Тетрадь</span>`
+              : `<span class="badge rounded-pill" style="background:#cfe2ff;color:#084298;border:1px solid #9ec5fe;font-weight:500;font-size:.72rem;"><i class="bi bi-file-earmark-text me-1"></i>Электронная</span>`;
+            const filesBtn = !isNotebook
+              ? `<button class="btn btn-sm btn-outline-primary history-view-files" data-assignment-id="${item.assignment_id}" data-student-id="${escapeHtml(item.student_id)}"><i class="bi bi-paperclip me-1"></i>Файлы</button>`
+              : '';
+            const dateStr = item.graded_at ? new Date(item.graded_at).toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+            const card = document.createElement('div');
+            card.className = 'history-card border rounded-3 p-3 mb-2';
+            card.style.cssText = 'background:#fff;transition:box-shadow .15s;';
+            card.innerHTML = `
+              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                <div>
+                  <div class="fw-semibold">${escapeHtml(item.student_name)}</div>
+                  <div class="text-muted" style="font-size:.8rem;">${escapeHtml(item.student_id)}</div>
+                </div>
+                ${typeBadge}
+              </div>
+              <div class="mt-2" style="font-size:.85rem;">
+                <span class="text-muted">${escapeHtml(item.subject)}</span>
+                <span class="mx-1 text-muted">·</span>
+                <span>${escapeHtml(item.assignment_title)}</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-1">
+                <small class="text-muted"><i class="bi bi-calendar-check me-1"></i>${dateStr}</small>
+                ${filesBtn}
+              </div>`;
+            list.appendChild(card);
           });
-          document.querySelectorAll('.history-view-files').forEach(btn => {
+          list.querySelectorAll('.history-view-files').forEach(btn => {
             btn.addEventListener('click', async (e) => {
               const b = e.currentTarget;
               const res = await fetch(`/api/teacher/files/${b.dataset.assignmentId}/${b.dataset.studentId}`, { headers: getAuthHeaders() });
@@ -627,11 +644,11 @@
               files.forEach(f => {
                 const button = document.createElement('button');
                 button.className = 'btn btn-sm btn-outline-secondary w-100 mb-2';
-                button.innerHTML = `<i class="bi bi-paperclip me-1"></i>${f.name}`;
+                button.innerHTML = `<i class="bi bi-paperclip me-1"></i>${escapeHtml(f.name)}`;
                 button.onclick = async () => {
-                  const res = await fetch(`/download/${f.path}`, { headers: getAuthHeaders() });
-                  if (!res.ok) { showToast('Ошибка скачивания', 'danger'); return; }
-                  const blob = await res.blob();
+                  const r = await fetch(`/download/${f.path}`, { headers: getAuthHeaders() });
+                  if (!r.ok) { showToast('Ошибка скачивания', 'danger'); return; }
+                  const blob = await r.blob();
                   const url = window.URL.createObjectURL(blob);
                   const a = document.createElement('a'); a.href = url; a.download = f.name;
                   document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); a.remove();

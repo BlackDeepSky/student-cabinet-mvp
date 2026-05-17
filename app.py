@@ -258,20 +258,22 @@ app.add_middleware(
 # Подключение статики
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+_NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+
 @app.get("/", response_class=HTMLResponse)
 async def landing_page():
     with open("static/landing.html", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+        return HTMLResponse(f.read(), headers=_NO_CACHE)
 
 @app.get("/student", response_class=HTMLResponse)
 async def student_page():
     with open("static/student.html", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+        return HTMLResponse(f.read(), headers=_NO_CACHE)
 
 @app.get("/teacher", response_class=HTMLResponse)
 async def teacher_page():
     with open("static/teacher.html", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+        return HTMLResponse(f.read(), headers=_NO_CACHE)
 
 @app.get("/sw.js")
 async def service_worker():
@@ -1034,7 +1036,7 @@ async def download_feedback_file(submission_id: int, session = Depends(require_a
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page():
     with open("static/admin.html", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+        return HTMLResponse(f.read(), headers=_NO_CACHE)
 
 async def require_admin(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):

@@ -445,14 +445,6 @@ async def submit_notebook(
             raise HTTPException(400, "Это задание сдаётся в электронном виде")
 
         cur = conn.execute("""
-            SELECT 1 FROM grades g
-            JOIN assignments a ON a.subject_id = g.subject_id
-            WHERE a.id = %s AND g.student_id = %s
-        """, (assignment_id, user_id))
-        if cur.fetchone():
-            raise HTTPException(409, "Оценка по предмету уже выставлена.")
-
-        cur = conn.execute("""
             SELECT id, status FROM submissions
             WHERE student_id = %s AND assignment_id = %s
         """, (user_id, assignment_id))

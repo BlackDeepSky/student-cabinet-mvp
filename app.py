@@ -1616,6 +1616,10 @@ async def admin_create_announcement(
     expires_at: Optional[str] = Form(None),
     admin_id = Depends(require_admin)
 ):
+    if not title.strip() or len(title) > 200:
+        raise HTTPException(400, "Заголовок: от 1 до 200 символов")
+    if not body.strip() or len(body) > 5000:
+        raise HTTPException(400, "Текст объявления: от 1 до 5000 символов")
     expires = expires_at if expires_at and expires_at.strip() else None
     with get_db() as conn:
         cur = conn.execute("""
@@ -1693,6 +1697,10 @@ async def send_personal_message(
     user_id, user_type = session
     if user_type not in ("admin", "teacher"):
         raise HTTPException(403, "Доступ запрещён")
+    if not title.strip() or len(title) > 200:
+        raise HTTPException(400, "Тема: от 1 до 200 символов")
+    if not body.strip() or len(body) > 10000:
+        raise HTTPException(400, "Текст сообщения: от 1 до 10000 символов")
 
     with get_db() as conn:
         if user_type == "teacher":

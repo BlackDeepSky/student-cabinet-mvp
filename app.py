@@ -1091,6 +1091,22 @@ async def admin_change_password(
         conn.execute("UPDATE admins SET password_hash = %s WHERE id = %s", (hash_password(new_password), admin_id))
     return {"ok": True}
 
+# --- Аудит ---
+
+def write_audit(conn, action: str, entity: str, entity_name: str = None, details: str = None):
+    conn.execute(
+        "INSERT INTO admin_audit_log (action, entity, entity_name, details) VALUES (%s, %s, %s, %s)",
+        (action, entity, entity_name, details)
+    )
+
+@app.get("/api/admin/audit-log")
+async def admin_audit_log_list(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT id, action, entity, entity_name, details, created_at FROM admin_audit_log ORDER BY created_at DESC LIMIT 500"
+        )
+        return [dict(r) for r in cur.fetchall()]
+
 # --- Студенты ---
 
 @app.get("/api/admin/stats")
@@ -1244,6 +1260,7 @@ async def admin_add_student(
                   email or None, hash_password(temp_password)))
         except Exception:
             raise HTTPException(400, "Студент с таким ID уже существует")
+        write_audit(conn, "Добавлен студент", "student", f"{last_name} {first_name} ({clean_id})")
     return {"ok": True, "temp_password": temp_password}
 
 @app.put("/api/admin/students/{student_db_id}")
@@ -1257,32 +1274,38 @@ async def admin_edit_student(
     admin_id = Depends(require_admin)
 ):
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE id = %s", (student_db_id,))
-        if not cur.fetchone():
+        cur = conn.execute("SELECT student_id FROM students WHERE id = %s", (student_db_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Студент не найден")
         conn.execute("""
             UPDATE students SET last_name=%s, first_name=%s, patronymic=%s, group_name=%s, email=%s
             WHERE id=%s
         """, (last_name, first_name, patronymic or None, group_name or None, email or None, student_db_id))
+        write_audit(conn, "Изменён студент", "student", f"{last_name} {first_name} ({row['student_id']})")
     return {"ok": True}
 
 @app.post("/api/admin/students/{student_db_id}/reset-password")
 async def admin_reset_student_password(student_db_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE id = %s", (student_db_id,))
-        if not cur.fetchone():
+        cur = conn.execute("SELECT student_id, last_name, first_name FROM students WHERE id = %s", (student_db_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Студент не найден")
         temp_password = secrets.token_hex(4)
         conn.execute("UPDATE students SET password_hash = %s WHERE id = %s",
                      (hash_password(temp_password), student_db_id))
+        write_audit(conn, "Сброс пароля студента", "student", f"{row['last_name']} {row['first_name']} ({row['student_id']})")
     return {"ok": True, "temp_password": temp_password}
 
 @app.delete("/api/admin/students/{student_db_id}")
 async def admin_delete_student(student_db_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM students WHERE id = %s", (student_db_id,))
-        if not cur.fetchone():
+        cur = conn.execute("SELECT student_id, last_name, first_name FROM students WHERE id = %s", (student_db_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Студент не найден")
+        write_audit(conn, "Удалён студент", "student", f"{row['last_name']} {row['first_name']} ({row['student_id']})")
         conn.execute("DELETE FROM students WHERE id = %s", (student_db_id,))
     return {"ok": True}
 
@@ -1317,6 +1340,7 @@ async def admin_add_teacher(
                   email or None, hash_password(temp_password)))
         except Exception:
             raise HTTPException(400, "Преподаватель с таким ID уже существует")
+        write_audit(conn, "Добавлен преподаватель", "teacher", f"{last_name} {first_name} ({clean_id})")
     return {"ok": True, "temp_password": temp_password}
 
 @app.put("/api/admin/teachers/{teacher_db_id}")
@@ -1329,32 +1353,38 @@ async def admin_edit_teacher(
     admin_id = Depends(require_admin)
 ):
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM teachers WHERE id = %s", (teacher_db_id,))
-        if not cur.fetchone():
+        cur = conn.execute("SELECT teacher_id FROM teachers WHERE id = %s", (teacher_db_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Преподаватель не найден")
         conn.execute("""
             UPDATE teachers SET last_name=%s, first_name=%s, patronymic=%s, email=%s
             WHERE id=%s
         """, (last_name, first_name, patronymic or None, email or None, teacher_db_id))
+        write_audit(conn, "Изменён преподаватель", "teacher", f"{last_name} {first_name} ({row['teacher_id']})")
     return {"ok": True}
 
 @app.post("/api/admin/teachers/{teacher_db_id}/reset-password")
 async def admin_reset_teacher_password(teacher_db_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM teachers WHERE id = %s", (teacher_db_id,))
-        if not cur.fetchone():
+        cur = conn.execute("SELECT teacher_id, last_name, first_name FROM teachers WHERE id = %s", (teacher_db_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Преподаватель не найден")
         temp_password = secrets.token_hex(4)
         conn.execute("UPDATE teachers SET password_hash = %s WHERE id = %s",
                      (hash_password(temp_password), teacher_db_id))
+        write_audit(conn, "Сброс пароля преподавателя", "teacher", f"{row['last_name']} {row['first_name']} ({row['teacher_id']})")
     return {"ok": True, "temp_password": temp_password}
 
 @app.delete("/api/admin/teachers/{teacher_db_id}")
 async def admin_delete_teacher(teacher_db_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM teachers WHERE id = %s", (teacher_db_id,))
-        if not cur.fetchone():
+        cur = conn.execute("SELECT teacher_id, last_name, first_name FROM teachers WHERE id = %s", (teacher_db_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Преподаватель не найден")
+        write_audit(conn, "Удалён преподаватель", "teacher", f"{row['last_name']} {row['first_name']} ({row['teacher_id']})")
         conn.execute("DELETE FROM teachers WHERE id = %s", (teacher_db_id,))
     return {"ok": True}
 
@@ -1385,16 +1415,20 @@ async def admin_add_subject(
             cur = conn.execute("""
                 INSERT INTO subjects (name, code, semester) VALUES (%s, %s, %s) RETURNING id
             """, (name, code or None, semester or None))
-            return {"ok": True, "id": cur.fetchone()[0]}
+            new_id = cur.fetchone()[0]
         except Exception:
             raise HTTPException(400, "Предмет с таким названием уже существует")
+        write_audit(conn, "Добавлен предмет", "subject", name)
+        return {"ok": True, "id": new_id}
 
 @app.delete("/api/admin/subjects/{subject_id}")
 async def admin_delete_subject(subject_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM subjects WHERE id = %s", (subject_id,))
-        if not cur.fetchone():
+        cur = conn.execute("SELECT name FROM subjects WHERE id = %s", (subject_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Предмет не найден")
+        write_audit(conn, "Удалён предмет", "subject", row["name"])
         conn.execute("DELETE FROM subjects WHERE id = %s", (subject_id,))
     return {"ok": True}
 
@@ -1409,13 +1443,23 @@ async def admin_assign_teacher(
             INSERT INTO subject_teachers (subject_id, teacher_id) VALUES (%s, %s)
             ON CONFLICT DO NOTHING
         """, (subject_id, teacher_id))
+        s = conn.execute("SELECT name FROM subjects WHERE id=%s", (subject_id,)).fetchone()
+        t = conn.execute("SELECT last_name, first_name FROM teachers WHERE id=%s", (teacher_id,)).fetchone()
+        if s and t:
+            write_audit(conn, "Назначен преподаватель на предмет", "subject",
+                        s["name"], f"Преподаватель: {t['last_name']} {t['first_name']}")
     return {"ok": True}
 
 @app.delete("/api/admin/subjects/{subject_id}/teachers/{teacher_id}")
 async def admin_remove_teacher(subject_id: int, teacher_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
+        s = conn.execute("SELECT name FROM subjects WHERE id=%s", (subject_id,)).fetchone()
+        t = conn.execute("SELECT last_name, first_name FROM teachers WHERE id=%s", (teacher_id,)).fetchone()
         conn.execute("DELETE FROM subject_teachers WHERE subject_id = %s AND teacher_id = %s",
                      (subject_id, teacher_id))
+        if s and t:
+            write_audit(conn, "Снят преподаватель с предмета", "subject",
+                        s["name"], f"Преподаватель: {t['last_name']} {t['first_name']}")
     return {"ok": True}
 
 @app.post("/api/admin/subjects/{subject_id}/students")
@@ -1429,6 +1473,11 @@ async def admin_enroll_student(
             INSERT INTO student_subjects (student_id, subject_id) VALUES (%s, %s)
             ON CONFLICT DO NOTHING
         """, (student_id, subject_id))
+        s = conn.execute("SELECT name FROM subjects WHERE id=%s", (subject_id,)).fetchone()
+        st = conn.execute("SELECT last_name, first_name, student_id FROM students WHERE id=%s", (student_id,)).fetchone()
+        if s and st:
+            write_audit(conn, "Студент зачислен на предмет", "subject",
+                        s["name"], f"Студент: {st['last_name']} {st['first_name']} ({st['student_id']})")
     return {"ok": True}
 
 @app.post("/api/admin/subjects/{subject_id}/students/bulk")
@@ -1443,13 +1492,22 @@ async def admin_bulk_enroll_students(subject_id: int, request: Request, admin_id
                 INSERT INTO student_subjects (student_id, subject_id) VALUES (%s, %s)
                 ON CONFLICT DO NOTHING
             """, (sid, subject_id))
+        s = conn.execute("SELECT name FROM subjects WHERE id=%s", (subject_id,)).fetchone()
+        if s:
+            write_audit(conn, "Массовое зачисление на предмет", "subject",
+                        s["name"], f"Зачислено студентов: {len(student_ids)}")
     return {"ok": True, "enrolled": len(student_ids)}
 
 @app.delete("/api/admin/subjects/{subject_id}/students/{student_id}")
 async def admin_unenroll_student(subject_id: int, student_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
+        s = conn.execute("SELECT name FROM subjects WHERE id=%s", (subject_id,)).fetchone()
+        st = conn.execute("SELECT last_name, first_name, student_id FROM students WHERE id=%s", (student_id,)).fetchone()
         conn.execute("DELETE FROM student_subjects WHERE student_id = %s AND subject_id = %s",
                      (student_id, subject_id))
+        if s and st:
+            write_audit(conn, "Студент отчислен с предмета", "subject",
+                        s["name"], f"Студент: {st['last_name']} {st['first_name']} ({st['student_id']})")
     return {"ok": True}
 
 @app.get("/api/admin/subjects/{subject_id}/members")
@@ -1502,7 +1560,11 @@ async def admin_add_assignment(
             INSERT INTO assignments (subject_id, title, description, deadline, submission_type)
             VALUES (%s, %s, %s, %s, %s) RETURNING id
         """, (subject_id, title, description or None, deadline or None, submission_type))
-        return {"ok": True, "id": cur.fetchone()[0]}
+        new_id = cur.fetchone()[0]
+        s = conn.execute("SELECT name FROM subjects WHERE id=%s", (subject_id,)).fetchone()
+        write_audit(conn, "Добавлено задание", "assignment", title,
+                    f"Предмет: {s['name']}" if s else None)
+        return {"ok": True, "id": new_id}
 
 @app.put("/api/admin/assignments/{assignment_id}")
 async def admin_edit_assignment(
@@ -1524,14 +1586,23 @@ async def admin_edit_assignment(
             UPDATE assignments SET subject_id=%s, title=%s, description=%s, deadline=%s, submission_type=%s
             WHERE id=%s
         """, (subject_id, title, description or None, deadline or None, submission_type, assignment_id))
+        s = conn.execute("SELECT name FROM subjects WHERE id=%s", (subject_id,)).fetchone()
+        write_audit(conn, "Изменено задание", "assignment", title,
+                    f"Предмет: {s['name']}" if s else None)
     return {"ok": True}
 
 @app.delete("/api/admin/assignments/{assignment_id}")
 async def admin_delete_assignment(assignment_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
-        cur = conn.execute("SELECT id FROM assignments WHERE id = %s", (assignment_id,))
-        if not cur.fetchone():
+        cur = conn.execute("""
+            SELECT a.title, s.name AS subject_name FROM assignments a
+            JOIN subjects s ON a.subject_id = s.id WHERE a.id = %s
+        """, (assignment_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Задание не найдено")
+        write_audit(conn, "Удалено задание", "assignment", row["title"],
+                    f"Предмет: {row['subject_name']}")
         conn.execute("DELETE FROM assignments WHERE id = %s", (assignment_id,))
     return {"ok": True}
 
@@ -1693,11 +1764,15 @@ async def admin_create_announcement(
             RETURNING id
         """, (title.strip(), body.strip(), expires))
         new_id = cur.fetchone()[0]
+        write_audit(conn, "Создано объявление", "announcement", title.strip())
     return {"id": new_id, "message": "Объявление создано"}
 
 @app.delete("/api/admin/announcements/{ann_id}")
 async def admin_delete_announcement(ann_id: int, admin_id = Depends(require_admin)):
     with get_db() as conn:
+        row = conn.execute("SELECT title FROM announcements WHERE id=%s", (ann_id,)).fetchone()
+        if row:
+            write_audit(conn, "Удалено объявление", "announcement", row["title"])
         conn.execute("DELETE FROM announcements WHERE id = %s", (ann_id,))
     return {"message": "Объявление удалено"}
 
@@ -1777,13 +1852,19 @@ async def send_personal_message(
         else:
             sender_name = "Администрация"
 
-        cur = conn.execute("SELECT id FROM students WHERE id = %s", (student_id,))
-        if not cur.fetchone():
+        st = conn.execute(
+            "SELECT last_name, first_name, student_id FROM students WHERE id = %s", (student_id,)
+        ).fetchone()
+        if not st:
             raise HTTPException(404, "Студент не найден")
 
         conn.execute("""
             INSERT INTO personal_messages (student_id, title, body, sender_type, sender_name)
             VALUES (%s, %s, %s, %s, %s)
         """, (student_id, title.strip(), body.strip(), user_type, sender_name))
+
+        if user_type == "admin":
+            write_audit(conn, "Отправлено личное сообщение", "message", title.strip(),
+                        f"Студент: {st['last_name']} {st['first_name']} ({st['student_id']})")
 
     return {"message": "Сообщение отправлено"}

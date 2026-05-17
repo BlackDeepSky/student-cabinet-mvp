@@ -169,3 +169,12 @@ CREATE TABLE IF NOT EXISTS personal_messages (
     is_read     BOOLEAN DEFAULT FALSE,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id          SERIAL PRIMARY KEY,
+    action      TEXT NOT NULL,
+    entity      TEXT NOT NULL,
+    entity_name TEXT,
+    details     TEXT,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

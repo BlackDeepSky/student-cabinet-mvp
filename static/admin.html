@@ -190,6 +190,7 @@
           <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-subjects"><i class="bi bi-book me-1"></i>Предметы</button></li>
           <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-assignments"><i class="bi bi-journal-text me-1"></i>Задания</button></li>
           <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-announcements" id="ann-tab-btn"><i class="bi bi-megaphone me-1"></i>Объявления</button></li>
+          <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-audit" id="audit-tab-btn"><i class="bi bi-journal-text me-1"></i>Бэклог</button></li>
         </ul>
 
         <div class="tab-content">
@@ -328,6 +329,22 @@
                   <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-send me-1"></i>Отправить</button>
                 </form>
               </div>
+            </div>
+          </div>
+
+          <!-- Бэклог -->
+          <div class="tab-pane fade" id="tab-audit">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <div>
+                <h6 class="fw-bold mb-0"><i class="bi bi-journal-text me-2 text-secondary"></i>Журнал действий</h6>
+                <p class="text-muted small mb-0">Все изменения, внесённые администратором</p>
+              </div>
+              <button class="btn btn-outline-secondary btn-sm" id="audit-refresh-btn"><i class="bi bi-arrow-clockwise me-1"></i>Обновить</button>
+            </div>
+            <div id="audit-list"></div>
+            <div id="audit-empty" style="display:none;" class="text-center py-5 text-muted">
+              <i class="bi bi-journal" style="font-size:2.5rem;opacity:.4;"></i>
+              <p class="mt-2 mb-0">Действий пока нет</p>
             </div>
           </div>
 
@@ -819,6 +836,61 @@
 
     document.getElementById('card-pending').addEventListener('click', loadPendingDetails);
     document.getElementById('card-overdue').addEventListener('click', loadOverdueDetails);
+
+    const AUDIT_ICONS = {
+      student:      { icon: 'bi-person',           color: '#1d6fef' },
+      teacher:      { icon: 'bi-person-workspace',  color: '#059669' },
+      subject:      { icon: 'bi-book',              color: '#7c3aed' },
+      assignment:   { icon: 'bi-journal-text',      color: '#d97706' },
+      announcement: { icon: 'bi-megaphone',         color: '#0891b2' },
+      message:      { icon: 'bi-envelope',          color: '#db2777' },
+    };
+    const AUDIT_ACTION_COLOR = {
+      'Добавлен': '#059669', 'Добавлено': '#059669',
+      'Создано': '#059669',
+      'Изменён': '#1d6fef', 'Изменено': '#1d6fef',
+      'Назначен': '#1d6fef', 'Зачислен': '#1d6fef',
+      'Массовое': '#1d6fef',
+      'Сброс': '#d97706',
+      'Снят': '#dc2626', 'Удалён': '#dc2626', 'Удалено': '#dc2626',
+      'Отправлено': '#7c3aed',
+    };
+
+    async function loadAuditLog() {
+      const res = await fetch('/api/admin/audit-log', { headers: authHeaders() });
+      if (!res.ok) return;
+      const items = await res.json();
+      const list = document.getElementById('audit-list');
+      const empty = document.getElementById('audit-empty');
+      list.innerHTML = '';
+      if (items.length === 0) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+      items.forEach(item => {
+        const meta = AUDIT_ICONS[item.entity] || { icon: 'bi-gear', color: '#6c757d' };
+        const firstWord = item.action.split(' ')[0];
+        const actionColor = AUDIT_ACTION_COLOR[firstWord] || '#6c757d';
+        const dateStr = new Date(item.created_at).toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+        const card = document.createElement('div');
+        card.className = 'detail-card d-flex gap-3 align-items-start';
+        card.innerHTML = `
+          <div class="flex-shrink-0 d-flex align-items-center justify-content-center rounded-circle"
+               style="width:36px;height:36px;background:${meta.color}18;">
+            <i class="bi ${meta.icon}" style="color:${meta.color};font-size:1rem;"></i>
+          </div>
+          <div class="flex-grow-1 min-w-0">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-1">
+              <span class="fw-semibold" style="color:${actionColor};font-size:.88rem;">${escapeHtml(item.action)}</span>
+              <small class="text-muted flex-shrink-0">${dateStr}</small>
+            </div>
+            ${item.entity_name ? `<div style="font-size:.84rem;">${escapeHtml(item.entity_name)}</div>` : ''}
+            ${item.details ? `<div class="text-muted" style="font-size:.78rem;">${escapeHtml(item.details)}</div>` : ''}
+          </div>`;
+        list.appendChild(card);
+      });
+    }
+
+    document.getElementById('audit-tab-btn').addEventListener('click', loadAuditLog);
+    document.getElementById('audit-refresh-btn').addEventListener('click', loadAuditLog);
 
     async function loadAll() {
       await Promise.all([loadStudents(), loadTeachers(), loadSubjects(), loadAssignments(), loadStats()]);

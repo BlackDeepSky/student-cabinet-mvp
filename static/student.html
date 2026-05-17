@@ -262,22 +262,40 @@
                     </a>
                 </div>
 
-                <p class="section-title"><i class="bi bi-journal-text me-2"></i>Задания</p>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <p class="section-title mb-0"><i class="bi bi-journal-text me-2"></i>Задания</p>
+                    <button id="show-grades-btn" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-bar-chart-line me-1"></i>Успеваемость
+                    </button>
+                </div>
                 <div id="assignments"></div>
+            </div>
+        </div>
 
-                <p class="section-title"><i class="bi bi-bar-chart-line me-2"></i>Успеваемость</p>
-                <div class="table-responsive">
-                    <table class="table table-bordered table-hover table-sm bg-white">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Предмет</th>
-                                <th>Оценка</th>
-                                <th>Статус</th>
-                                <th class="d-none d-sm-table-cell">Дата</th>
-                            </tr>
-                        </thead>
-                        <tbody id="grades"></tbody>
-                    </table>
+        <!-- Modal: успеваемость -->
+        <div class="modal fade" id="gradesModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-bar-chart-line me-2"></i>Успеваемость</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Предмет</th>
+                                        <th>Оценка</th>
+                                        <th>Статус</th>
+                                        <th class="d-none d-sm-table-cell">Дата</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="grades"></tbody>
+                            </table>
+                        </div>
+                        <p class="text-muted text-center d-none" id="grades-empty">Нет данных</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -396,7 +414,6 @@
                 if (token && name) {
                     document.getElementById('student-name').textContent = name;
                     loadAssignments();
-                    loadGrades();
                     showMain();
                     updateBadge();
                 } else {
@@ -425,7 +442,6 @@
                     localStorage.setItem('student_name', fullName);
                     document.getElementById('student-name').textContent = fullName;
                     loadAssignments();
-                    loadGrades();
                     showMain();
                     updateBadge();
                 } catch (err) {
@@ -668,15 +684,18 @@
             }
 
             async function loadGrades() {
+                const tbody = document.getElementById('grades');
+                const emptyEl = document.getElementById('grades-empty');
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Загрузка...</td></tr>';
+                emptyEl.classList.add('d-none');
                 try {
                     const res = await fetch('/api/grades/me', { headers: getAuthHeaders() });
                     if (res.status === 401 || res.status === 403) { handleAuthError(); return; }
                     if (!res.ok) throw new Error('Ошибка загрузки');
                     const grades = await res.json();
-                    const tbody = document.getElementById('grades');
                     tbody.innerHTML = '';
                     if (grades.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">Нет данных</td></tr>';
+                        emptyEl.classList.remove('d-none');
                         return;
                     }
                     grades.forEach(g => {
@@ -685,9 +704,14 @@
                         tbody.appendChild(tr);
                     });
                 } catch (err) {
-                    console.warn('Не удалось загрузить успеваемость:', err.message);
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Ошибка загрузки</td></tr>';
                 }
             }
+
+            document.getElementById('show-grades-btn').addEventListener('click', () => {
+                loadGrades();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('gradesModal')).show();
+            });
 
             document.getElementById('cp-submit-btn').addEventListener('click', async () => {
                 const alertEl = document.getElementById('change-password-alert');

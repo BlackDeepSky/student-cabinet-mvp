@@ -18,7 +18,7 @@
                 --brand: #0d6efd;
                 --brand-dark: #0a58ca;
             }
-            body { background: #f0f4f8; min-height: 100vh; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+            body { background: #f0f4f8; min-height: 100vh; font-family: 'Inter', system-ui, -apple-system, sans-serif; overflow-x: hidden; }
 
             /* Navbar */
             .app-navbar {
@@ -42,6 +42,10 @@
             .app-navbar .brand i { font-size: 1.3rem; }
             .app-navbar .role-badge { background: rgba(255,255,255,.2); color: #fff; font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; letter-spacing: .06em; text-transform: uppercase; }
             .app-navbar .nav-actions { display: flex; gap: 8px; align-items: center; }
+            @media (max-width: 400px) {
+                .app-navbar .brand-text { display: none; }
+                .app-navbar .role-badge { display: none; }
+            }
 
             /* Login */
             .login-wrapper {
@@ -184,10 +188,14 @@
                     display: grid;
                     grid-template-columns: repeat(2, 1fr);
                     gap: 1rem;
-                    align-items: start;
                 }
-                #assignments .assignment-card { margin-bottom: 0; }
+                #assignments .assignment-card { margin-bottom: 0; height: 100%; }
             }
+
+            /* Mobile safety */
+            .assignment-card .card-body { word-break: break-word; }
+            .assignment-card h6 { word-break: break-word; }
+            .d-flex.gap-2.flex-wrap { flex-wrap: wrap !important; }
 
             /* Table */
             .table { border-radius: 10px; overflow: hidden; }
@@ -210,7 +218,7 @@
         <nav class="app-navbar" id="app-navbar" style="display:none">
             <a href="#" class="brand">
                 <i class="bi bi-mortarboard-fill"></i>
-                КабинетЗаочника
+                <span class="brand-text">КабинетЗаочника</span>
                 <span class="role-badge">Студент</span>
             </a>
             <div class="nav-actions">

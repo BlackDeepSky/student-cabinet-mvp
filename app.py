@@ -696,6 +696,7 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
                 a.submission_type,
                 s.name AS subject,
                 st.last_name || ' ' || st.first_name AS student_name,
+                st.id AS student_db_id,
                 st.student_id,
                 sub.submitted_at,
                 sub.status AS last_status,
@@ -743,6 +744,7 @@ async def get_my_teacher_assignments(session = Depends(require_auth)):
                 "submission_type": stype,
                 "subject": row["subject"],
                 "student_name": row["student_name"],
+                "student_db_id": row["student_db_id"],
                 "student_id": row["student_id"],
                 "submitted_at": row["submitted_at"],
                 "last_status": last_status,
@@ -1560,3 +1562,153 @@ async def download_file(path: str, session = Depends(require_auth)):
                 raise HTTPException(403, "Доступ запрещён")
 
     return _r2_stream(path, os.path.basename(path))
+
+
+# ===== ОБЪЯВЛЕНИЯ (БАННЕР) =====
+
+@app.get("/api/announcements/active")
+async def get_active_announcement(session = Depends(require_auth)):
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT id, title, body, expires_at, created_at
+            FROM announcements
+            WHERE is_active = TRUE
+              AND (expires_at IS NULL OR expires_at >= CURRENT_DATE)
+            ORDER BY created_at DESC
+            LIMIT 1
+        """)
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "body": row["body"],
+        "expires_at": str(row["expires_at"]) if row["expires_at"] else None,
+        "created_at": str(row["created_at"]),
+    }
+
+@app.get("/api/admin/announcements")
+async def admin_list_announcements(admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT id, title, body, is_active, expires_at, created_at
+            FROM announcements
+            ORDER BY created_at DESC
+        """)
+        rows = cur.fetchall()
+    return [
+        {
+            "id": r["id"], "title": r["title"], "body": r["body"],
+            "is_active": r["is_active"],
+            "expires_at": str(r["expires_at"]) if r["expires_at"] else None,
+            "created_at": str(r["created_at"]),
+        }
+        for r in rows
+    ]
+
+@app.post("/api/admin/announcements")
+async def admin_create_announcement(
+    title: str = Form(...),
+    body: str = Form(...),
+    expires_at: Optional[str] = Form(None),
+    admin_id = Depends(require_admin)
+):
+    expires = expires_at if expires_at and expires_at.strip() else None
+    with get_db() as conn:
+        cur = conn.execute("""
+            INSERT INTO announcements (title, body, expires_at)
+            VALUES (%s, %s, %s)
+            RETURNING id
+        """, (title.strip(), body.strip(), expires))
+        new_id = cur.fetchone()[0]
+    return {"id": new_id, "message": "Объявление создано"}
+
+@app.delete("/api/admin/announcements/{ann_id}")
+async def admin_delete_announcement(ann_id: int, admin_id = Depends(require_admin)):
+    with get_db() as conn:
+        conn.execute("DELETE FROM announcements WHERE id = %s", (ann_id,))
+    return {"message": "Объявление удалено"}
+
+
+# ===== ЛИЧНЫЕ СООБЩЕНИЯ =====
+
+@app.get("/api/messages/me")
+async def get_my_messages(session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "student":
+        raise HTTPException(403, "Доступ запрещён")
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT id, title, body, sender_type, sender_name, is_read, created_at
+            FROM personal_messages
+            WHERE student_id = %s
+            ORDER BY created_at DESC
+        """, (user_id,))
+        rows = cur.fetchall()
+    return [
+        {
+            "id": r["id"], "title": r["title"], "body": r["body"],
+            "sender_type": r["sender_type"], "sender_name": r["sender_name"],
+            "is_read": r["is_read"],
+            "created_at": str(r["created_at"]),
+        }
+        for r in rows
+    ]
+
+@app.get("/api/messages/me/unread-count")
+async def get_unread_count(session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "student":
+        raise HTTPException(403, "Доступ запрещён")
+    with get_db() as conn:
+        cur = conn.execute("""
+            SELECT COUNT(*) FROM personal_messages
+            WHERE student_id = %s AND is_read = FALSE
+        """, (user_id,))
+        count = cur.fetchone()[0]
+    return {"count": count}
+
+@app.put("/api/messages/{msg_id}/read")
+async def mark_message_read(msg_id: int, session = Depends(require_auth)):
+    user_id, user_type = session
+    if user_type != "student":
+        raise HTTPException(403, "Доступ запрещён")
+    with get_db() as conn:
+        cur = conn.execute("""
+            UPDATE personal_messages SET is_read = TRUE
+            WHERE id = %s AND student_id = %s
+        """, (msg_id, user_id))
+    return {"message": "Прочитано"}
+
+@app.post("/api/messages/send")
+async def send_personal_message(
+    student_id: int = Form(...),
+    title: str = Form(...),
+    body: str = Form(...),
+    session = Depends(require_auth)
+):
+    user_id, user_type = session
+    if user_type not in ("admin", "teacher"):
+        raise HTTPException(403, "Доступ запрещён")
+
+    with get_db() as conn:
+        if user_type == "teacher":
+            cur = conn.execute(
+                "SELECT last_name, first_name FROM teachers WHERE id = %s", (user_id,)
+            )
+            row = cur.fetchone()
+            sender_name = f"{row['last_name']} {row['first_name']}" if row else "Преподаватель"
+        else:
+            sender_name = "Администрация"
+
+        cur = conn.execute("SELECT id FROM students WHERE id = %s", (student_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, "Студент не найден")
+
+        conn.execute("""
+            INSERT INTO personal_messages (student_id, title, body, sender_type, sender_name)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (student_id, title.strip(), body.strip(), user_type, sender_name))
+
+    return {"message": "Сообщение отправлено"}

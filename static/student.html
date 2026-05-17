@@ -71,6 +71,28 @@
             .login-card h2 { text-align: center; font-size: 1.4rem; font-weight: 700; margin-bottom: .25rem; letter-spacing: -0.01em; }
             .login-card .login-sub { text-align: center; color: var(--brand); font-size: 1rem; font-weight: 600; margin-bottom: 1.5rem; }
 
+            /* Announcement banner */
+            .announcement-banner {
+                background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+                color: #fff;
+                border-radius: 12px;
+                padding: 0.85rem 1rem;
+                margin-bottom: 1rem;
+                display: flex;
+                align-items: flex-start;
+                gap: 0.75rem;
+                box-shadow: 0 2px 8px rgba(13,110,253,.25);
+            }
+            .announcement-banner .ann-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 1px; }
+            .announcement-banner .ann-title { font-weight: 700; font-size: .95rem; margin-bottom: 2px; }
+            .announcement-banner .ann-body  { font-size: .87rem; opacity: .92; }
+            .announcement-banner .ann-close {
+                margin-left: auto; flex-shrink: 0;
+                background: none; border: none; color: rgba(255,255,255,.7);
+                font-size: 1.1rem; cursor: pointer; padding: 0 0 0 0.5rem; line-height: 1;
+            }
+            .announcement-banner .ann-close:hover { color: #fff; }
+
             /* Cards */
             .assignment-card {
                 border: none;
@@ -192,6 +214,10 @@
                 <span class="role-badge">Студент</span>
             </a>
             <div class="nav-actions">
+                <button id="messages-btn" class="btn btn-sm btn-light position-relative" title="Сообщения">
+                    <i class="bi bi-envelope-fill"></i>
+                    <span id="messages-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size:.65rem"></span>
+                </button>
                 <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
                     <i class="bi bi-key"></i><span class="d-none d-sm-inline ms-1">Пароль</span>
                 </button>
@@ -262,6 +288,8 @@
                     </a>
                 </div>
 
+                <div id="announcement-banner" style="display:none"></div>
+
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <p class="section-title mb-0"><i class="bi bi-journal-text me-2"></i>Задания</p>
                     <button id="show-grades-btn" class="btn btn-outline-primary btn-sm">
@@ -269,6 +297,22 @@
                     </button>
                 </div>
                 <div id="assignments"></div>
+            </div>
+        </div>
+
+        <!-- Modal: сообщения -->
+        <div class="modal fade" id="messagesModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header" style="background:linear-gradient(135deg,#0d6efd,#0a58ca);color:#fff;border-radius:calc(.3rem - 1px) calc(.3rem - 1px) 0 0">
+                        <h5 class="modal-title"><i class="bi bi-envelope-fill me-2"></i>Сообщения от учебного заведения</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <div id="messages-list"></div>
+                        <p class="text-muted text-center py-4 d-none" id="messages-empty">Нет сообщений</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -414,6 +458,8 @@
                 if (token && name) {
                     document.getElementById('student-name').textContent = name;
                     loadAssignments();
+                    loadAnnouncement();
+                    loadUnreadCount();
                     showMain();
                     updateBadge();
                 } else {
@@ -442,6 +488,8 @@
                     localStorage.setItem('student_name', fullName);
                     document.getElementById('student-name').textContent = fullName;
                     loadAssignments();
+                    loadAnnouncement();
+                    loadUnreadCount();
                     showMain();
                     updateBadge();
                 } catch (err) {
@@ -711,6 +759,86 @@
             document.getElementById('show-grades-btn').addEventListener('click', () => {
                 loadGrades();
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('gradesModal')).show();
+            });
+
+            async function loadAnnouncement() {
+                try {
+                    const res = await fetch('/api/announcements/active', { headers: getAuthHeaders() });
+                    if (!res.ok) return;
+                    const ann = await res.json();
+                    const banner = document.getElementById('announcement-banner');
+                    if (!ann) { banner.style.display = 'none'; return; }
+                    banner.style.display = 'block';
+                    banner.innerHTML = `
+                        <div class="announcement-banner">
+                            <span class="ann-icon"><i class="bi bi-megaphone-fill"></i></span>
+                            <div>
+                                <div class="ann-title">${escapeHtml(ann.title)}</div>
+                                <div class="ann-body">${escapeHtml(ann.body)}</div>
+                            </div>
+                            <button class="ann-close" id="ann-close-btn" title="Закрыть"><i class="bi bi-x-lg"></i></button>
+                        </div>`;
+                    document.getElementById('ann-close-btn').addEventListener('click', () => {
+                        banner.style.display = 'none';
+                    });
+                } catch {}
+            }
+
+            async function loadUnreadCount() {
+                try {
+                    const res = await fetch('/api/messages/me/unread-count', { headers: getAuthHeaders() });
+                    if (!res.ok) return;
+                    const { count } = await res.json();
+                    const badge = document.getElementById('messages-badge');
+                    if (count > 0) {
+                        badge.textContent = count > 9 ? '9+' : count;
+                        badge.classList.remove('d-none');
+                    } else {
+                        badge.classList.add('d-none');
+                    }
+                } catch {}
+            }
+
+            async function loadMessages() {
+                const list = document.getElementById('messages-list');
+                const emptyEl = document.getElementById('messages-empty');
+                list.innerHTML = '';
+                emptyEl.classList.add('d-none');
+                try {
+                    const res = await fetch('/api/messages/me', { headers: getAuthHeaders() });
+                    if (!res.ok) throw new Error();
+                    const messages = await res.json();
+                    if (messages.length === 0) { emptyEl.classList.remove('d-none'); return; }
+                    messages.forEach(m => {
+                        const date = new Date(m.created_at).toLocaleDateString('ru-RU', { day:'2-digit', month:'long', year:'numeric' });
+                        const senderIcon = m.sender_type === 'admin' ? 'bi-shield-fill' : 'bi-person-fill';
+                        const div = document.createElement('div');
+                        div.className = `p-3 border-bottom ${m.is_read ? '' : 'bg-light'}`;
+                        div.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <span class="fw-semibold">${m.is_read ? '' : '<span class="badge bg-primary me-1" style="font-size:.65rem">Новое</span>'}${escapeHtml(m.title)}</span>
+                                <small class="text-muted ms-2 flex-shrink-0">${date}</small>
+                            </div>
+                            <p class="mb-1 text-muted" style="font-size:.9rem; white-space:pre-wrap">${escapeHtml(m.body)}</p>
+                            <small class="text-muted"><i class="bi ${senderIcon} me-1"></i>${escapeHtml(m.sender_name)}</small>`;
+                        if (!m.is_read) {
+                            div.addEventListener('click', async () => {
+                                await fetch(`/api/messages/${m.id}/read`, { method: 'PUT', headers: getAuthHeaders() });
+                                div.classList.remove('bg-light');
+                                div.querySelector('.badge')?.remove();
+                                loadUnreadCount();
+                            }, { once: true });
+                        }
+                        list.appendChild(div);
+                    });
+                } catch {
+                    list.innerHTML = '<p class="text-danger text-center py-3">Ошибка загрузки</p>';
+                }
+            }
+
+            document.getElementById('messages-btn').addEventListener('click', () => {
+                loadMessages();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('messagesModal')).show();
             });
 
             document.getElementById('cp-submit-btn').addEventListener('click', async () => {

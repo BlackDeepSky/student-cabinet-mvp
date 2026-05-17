@@ -258,6 +258,31 @@
     </div>
   </div>
 
+  <!-- Modal: написать студенту -->
+  <div class="modal fade" id="sendMsgModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-envelope-fill me-2"></i>Написать студенту</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted mb-3" id="msg-student-label" style="font-size:.9rem"></p>
+          <form id="teacher-msg-form">
+            <input type="hidden" id="msg-student-db-id">
+            <div class="mb-3">
+              <input type="text" id="msg-title-teacher" class="form-control" placeholder="Тема сообщения" required maxlength="120">
+            </div>
+            <div class="mb-3">
+              <textarea id="msg-body-teacher" class="form-control" rows="4" placeholder="Текст сообщения" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-success"><i class="bi bi-send me-1"></i>Отправить</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: история -->
   <div class="modal fade" id="historyModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -465,13 +490,20 @@
                 <i class="bi bi-paperclip"></i>
               </button>`}
             </td>
-            <td>
+            <td class="d-flex gap-1 flex-wrap">
               <button class="btn btn-sm btn-outline-success set-grade"
                       data-student-id="${row.student_id}"
                       data-subject-name="${row.subject}"
                       data-assignment-id="${row.assignment_id}"
-                      data-submission-type="${row.submission_type || 'electronic'}">
+                      data-submission-type="${row.submission_type || 'electronic'}"
+                      title="Выставить статус">
                 <i class="bi bi-pencil-square"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-primary send-msg-btn"
+                      data-student-db-id="${row.student_db_id}"
+                      data-student-name="${row.student_name}"
+                      title="Написать студенту">
+                <i class="bi bi-envelope"></i>
               </button>
             </td>`;
           tbody.appendChild(tr);
@@ -503,6 +535,17 @@
               filesList.appendChild(button);
             });
             bootstrap.Modal.getOrCreateInstance(document.getElementById('filesModal')).show();
+          });
+        });
+
+        document.querySelectorAll('.send-msg-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const b = e.currentTarget;
+            document.getElementById('msg-student-db-id').value = b.dataset.studentDbId;
+            document.getElementById('msg-student-label').textContent = `Получатель: ${b.dataset.studentName}`;
+            document.getElementById('teacher-msg-form').reset();
+            document.getElementById('msg-student-db-id').value = b.dataset.studentDbId;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('sendMsgModal')).show();
           });
         });
 
@@ -709,6 +752,26 @@
     document.getElementById('changePasswordModal').addEventListener('hidden.bs.modal', () => {
       document.getElementById('change-password-form').reset();
       document.getElementById('change-password-alert').className = 'alert d-none';
+    });
+
+    document.getElementById('teacher-msg-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = new URLSearchParams({
+        student_id: document.getElementById('msg-student-db-id').value,
+        title: document.getElementById('msg-title-teacher').value,
+        body: document.getElementById('msg-body-teacher').value,
+      });
+      const res = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...getAuthHeaders() },
+        body
+      });
+      if (res.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('sendMsgModal')).hide();
+        showToast('Сообщение отправлено', 'success');
+      } else {
+        showToast('Ошибка отправки', 'danger');
+      }
     });
   </script>
 </body>

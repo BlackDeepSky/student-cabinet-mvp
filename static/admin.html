@@ -181,6 +181,7 @@
           <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-teachers"><i class="bi bi-person-workspace me-1"></i>Преподаватели</button></li>
           <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-subjects"><i class="bi bi-book me-1"></i>Предметы</button></li>
           <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-assignments"><i class="bi bi-journal-text me-1"></i>Задания</button></li>
+          <li class="nav-item flex-shrink-0"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-announcements" id="ann-tab-btn"><i class="bi bi-megaphone me-1"></i>Объявления</button></li>
         </ul>
 
         <div class="tab-content">
@@ -277,6 +278,48 @@
                 </thead>
                 <tbody id="assignments-tbody"></tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Вкладка: Объявления и сообщения -->
+          <div class="tab-pane fade" id="tab-announcements">
+            <div class="row g-4">
+              <!-- Общее объявление (баннер) -->
+              <div class="col-12 col-lg-6">
+                <h6 class="fw-bold mb-3"><i class="bi bi-megaphone-fill me-2 text-primary"></i>Общий баннер</h6>
+                <form id="ann-form" class="mb-4">
+                  <div class="mb-2">
+                    <input type="text" id="ann-title" class="form-control form-control-sm" placeholder="Заголовок" required maxlength="120">
+                  </div>
+                  <div class="mb-2">
+                    <textarea id="ann-body" class="form-control form-control-sm" rows="3" placeholder="Текст объявления" required></textarea>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label mb-1" style="font-size:.85rem">Показывать до (необязательно)</label>
+                    <input type="date" id="ann-expires" class="form-control form-control-sm">
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Опубликовать</button>
+                </form>
+                <div id="ann-list"></div>
+              </div>
+              <!-- Личное сообщение студенту -->
+              <div class="col-12 col-lg-6">
+                <h6 class="fw-bold mb-3"><i class="bi bi-envelope-fill me-2 text-success"></i>Личное сообщение студенту</h6>
+                <form id="msg-form">
+                  <div class="mb-2">
+                    <select id="msg-student" class="form-select form-select-sm" required>
+                      <option value="">— Выберите студента —</option>
+                    </select>
+                  </div>
+                  <div class="mb-2">
+                    <input type="text" id="msg-title" class="form-control form-control-sm" placeholder="Тема сообщения" required maxlength="120">
+                  </div>
+                  <div class="mb-2">
+                    <textarea id="msg-body" class="form-control form-control-sm" rows="4" placeholder="Текст сообщения" required></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-send me-1"></i>Отправить</button>
+                </form>
+              </div>
             </div>
           </div>
 
@@ -1020,6 +1063,82 @@
       await fetch(`/api/admin/assignments/${id}`, { method: 'DELETE', headers: authHeaders() });
       loadAssignments();
     }
+
+    // ===== ОБЪЯВЛЕНИЯ И ЛИЧНЫЕ СООБЩЕНИЯ =====
+
+    async function loadAnnouncements() {
+      const res = await fetch('/api/admin/announcements', { headers: authHeaders() });
+      if (!res.ok) return;
+      const list = await res.json();
+      const el = document.getElementById('ann-list');
+      if (list.length === 0) { el.innerHTML = '<p class="text-muted small">Нет объявлений</p>'; return; }
+      el.innerHTML = list.map(a => `
+        <div class="border rounded p-2 mb-2 ${a.is_active ? '' : 'opacity-50'}">
+          <div class="d-flex justify-content-between align-items-start">
+            <strong style="font-size:.9rem">${escapeHtml(a.title)}</strong>
+            <button class="btn btn-outline-danger btn-sm py-0 px-1 ms-2" onclick="deleteAnnouncement(${a.id})" title="Удалить"><i class="bi bi-trash"></i></button>
+          </div>
+          <p class="mb-1 text-muted" style="font-size:.85rem;white-space:pre-wrap">${escapeHtml(a.body)}</p>
+          <small class="text-muted">${a.expires_at ? 'До ' + a.expires_at : 'Без срока'} · ${new Date(a.created_at).toLocaleDateString('ru-RU')}</small>
+        </div>`).join('');
+    }
+
+    async function deleteAnnouncement(id) {
+      if (!confirm('Удалить объявление?')) return;
+      await fetch(`/api/admin/announcements/${id}`, { method: 'DELETE', headers: authHeaders() });
+      loadAnnouncements();
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    document.getElementById('ann-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const params = new URLSearchParams();
+      params.append('title', document.getElementById('ann-title').value);
+      params.append('body', document.getElementById('ann-body').value);
+      const exp = document.getElementById('ann-expires').value;
+      if (exp) params.append('expires_at', exp);
+      const res = await fetch('/api/admin/announcements', { method: 'POST', headers: formHeaders(), body: params });
+      if (res.ok) {
+        e.target.reset();
+        loadAnnouncements();
+        showToast('Объявление опубликовано');
+      } else {
+        showToast('Ошибка', 'danger');
+      }
+    });
+
+    async function loadStudentsForMsgSelect() {
+      const res = await fetch('/api/admin/students', { headers: authHeaders() });
+      if (!res.ok) return;
+      const students = await res.json();
+      const sel = document.getElementById('msg-student');
+      sel.innerHTML = '<option value="">— Выберите студента —</option>' +
+        students.map(s => `<option value="${s.id}">${escapeHtml(s.last_name)} ${escapeHtml(s.first_name)} (${escapeHtml(s.student_id)})</option>`).join('');
+    }
+
+    document.getElementById('msg-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = new URLSearchParams({
+        student_id: document.getElementById('msg-student').value,
+        title: document.getElementById('msg-title').value,
+        body: document.getElementById('msg-body').value,
+      });
+      const res = await fetch('/api/messages/send', { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+      if (res.ok) {
+        e.target.reset();
+        showToast('Сообщение отправлено');
+      } else {
+        showToast('Ошибка отправки', 'danger');
+      }
+    });
+
+    document.getElementById('ann-tab-btn').addEventListener('click', () => {
+      loadAnnouncements();
+      loadStudentsForMsgSelect();
+    });
 
     // Инициализация
     if (getToken()) showMain();

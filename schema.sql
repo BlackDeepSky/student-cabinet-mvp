@@ -147,3 +147,25 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
     NULL;
 END $$;
+
+-- Объявления (баннер для всех студентов)
+CREATE TABLE IF NOT EXISTS announcements (
+    id         SERIAL PRIMARY KEY,
+    title      TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    is_active  BOOLEAN DEFAULT TRUE,
+    expires_at DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Личные сообщения студентам (от администратора или преподавателя)
+CREATE TABLE IF NOT EXISTS personal_messages (
+    id          SERIAL PRIMARY KEY,
+    student_id  INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    sender_type TEXT NOT NULL CHECK (sender_type IN ('admin', 'teacher')),
+    sender_name TEXT NOT NULL,
+    is_read     BOOLEAN DEFAULT FALSE,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

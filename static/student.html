@@ -326,11 +326,11 @@
                     </div>
                     <div class="modal-body">
                         <div class="table-responsive">
-                            <table class="table table-bordered table-hover table-sm">
+                            <table class="table table-hover table-sm align-middle">
                                 <thead class="table-light">
                                     <tr>
                                         <th>Предмет</th>
-                                        <th>Оценка</th>
+                                        <th>Задание</th>
                                         <th>Статус</th>
                                         <th class="d-none d-sm-table-cell">Дата</th>
                                     </tr>
@@ -736,19 +736,32 @@
                 const emptyEl = document.getElementById('grades-empty');
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Загрузка...</td></tr>';
                 emptyEl.classList.add('d-none');
+                const statusCls = {
+                    approved:      'bg-success',
+                    rejected:      'bg-danger',
+                    resubmitted:   'bg-warning text-dark',
+                    submitted:     'bg-secondary',
+                    in_review:     'bg-warning text-dark',
+                    notebook_sent: 'bg-info text-dark',
+                };
                 try {
                     const res = await fetch('/api/grades/me', { headers: getAuthHeaders() });
                     if (res.status === 401 || res.status === 403) { handleAuthError(); return; }
                     if (!res.ok) throw new Error('Ошибка загрузки');
-                    const grades = await res.json();
+                    const items = await res.json();
                     tbody.innerHTML = '';
-                    if (grades.length === 0) {
+                    if (items.length === 0) {
                         emptyEl.classList.remove('d-none');
                         return;
                     }
-                    grades.forEach(g => {
+                    items.forEach(g => {
+                        const cls = statusCls[g.status] || 'bg-secondary';
                         const tr = document.createElement('tr');
-                        tr.innerHTML = `<td>${g.subject}</td><td>${g.grade || '–'}</td><td>${g.status || '–'}</td><td class="d-none d-sm-table-cell">${g.graded_at || '—'}</td>`;
+                        tr.innerHTML = `
+                            <td>${escapeHtml(g.subject)}</td>
+                            <td>${escapeHtml(g.assignment_title)}</td>
+                            <td><span class="badge ${cls}">${escapeHtml(g.status_label)}</span></td>
+                            <td class="d-none d-sm-table-cell" style="font-size:.85rem">${g.submitted_at || '—'}</td>`;
                         tbody.appendChild(tr);
                     });
                 } catch (err) {

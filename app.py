@@ -602,34 +602,46 @@ async def get_my_grades(session = Depends(require_auth)):
     if user_type != "student":
         raise HTTPException(403, "Доступ запрещён")
 
+    STATUS_LABELS = {
+        "submitted":     "Отправлено",
+        "in_review":     "На проверке",
+        "approved":      "Зачтено",
+        "rejected":      "Не зачтено",
+        "resubmitted":   "Повторно отправлено",
+        "notebook_sent": "Тетрадь отправлена",
+    }
+
     with get_db() as conn:
         cur = conn.execute("""
-            SELECT s.name AS subject, g.grade, g.status, g.graded_at
-            FROM grades g
-            JOIN subjects s ON g.subject_id = s.id
-            WHERE g.student_id = %s
-            ORDER BY g.graded_at DESC
+            SELECT s.name AS subject, a.title AS assignment_title,
+                   sub.status, sub.submitted_at
+            FROM submissions sub
+            JOIN assignments a ON sub.assignment_id = a.id
+            JOIN subjects s ON a.subject_id = s.id
+            WHERE sub.student_id = %s
+            ORDER BY sub.submitted_at DESC NULLS LAST
         """, (user_id,))
 
-        grades = []
+        result = []
         for row in cur.fetchall():
-            graded_at = row["graded_at"]
+            ts = row["submitted_at"]
             formatted_date = "—"
-            if graded_at:
-                if isinstance(graded_at, datetime):
-                    formatted_date = graded_at.strftime("%d.%m.%Y, %H:%M")
+            if ts:
+                if isinstance(ts, datetime):
+                    formatted_date = ts.strftime("%d.%m.%Y, %H:%M")
                 else:
                     try:
-                        formatted_date = datetime.fromisoformat(str(graded_at)).strftime("%d.%m.%Y, %H:%M")
+                        formatted_date = datetime.fromisoformat(str(ts)).strftime("%d.%m.%Y, %H:%M")
                     except ValueError:
                         pass
-            grades.append({
-                "subject": row["subject"],
-                "grade": row["grade"],
-                "status": row["status"],
-                "graded_at": formatted_date
+            result.append({
+                "subject":          row["subject"],
+                "assignment_title": row["assignment_title"],
+                "status":           row["status"],
+                "status_label":     STATUS_LABELS.get(row["status"], row["status"] or "—"),
+                "submitted_at":     formatted_date,
             })
-        return grades
+        return result
 
 # ===== ОБЩЕЕ =====
 

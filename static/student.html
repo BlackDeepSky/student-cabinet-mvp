@@ -559,8 +559,11 @@
                         }
 
                         let feedbackBlock = '';
-                        if (a.has_teacher_feedback) {
-                            feedbackBlock = `<button class="btn btn-sm btn-outline-info mt-2 download-feedback" data-submission-id="${a.submission_id}"><i class="bi bi-paperclip me-1"></i>Скачать комментарий преподавателя</button>`;
+                        if (a.feedback_files && a.feedback_files.length > 0) {
+                            const links = a.feedback_files.map(f =>
+                                `<button class="btn btn-sm btn-outline-info mt-1 me-1 download-feedback-file" data-file-id="${f.id}" data-file-name="${escapeHtml(f.name)}"><i class="bi bi-paperclip me-1"></i>${escapeHtml(f.name)}</button>`
+                            ).join('');
+                            feedbackBlock = `<div class="mt-2">${links}</div>`;
                         }
 
                         let actionBlock = '';
@@ -717,16 +720,18 @@
                         });
                     });
 
-                    document.querySelectorAll('.download-feedback').forEach(btn => {
+                    document.querySelectorAll('.download-feedback-file').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
-                            const submissionId = e.target.closest('[data-submission-id]').dataset.submissionId;
+                            const el = e.target.closest('[data-file-id]');
+                            const fileId = el.dataset.fileId;
+                            const fileName = el.dataset.fileName;
                             try {
-                                const res = await fetch(`/api/download/feedback/${submissionId}`, { headers: getAuthHeaders() });
+                                const res = await fetch(`/api/download/feedback-file/${fileId}`, { headers: getAuthHeaders() });
                                 if (!res.ok) throw new Error('Файл не найден');
                                 const blob = await res.blob();
                                 const url = window.URL.createObjectURL(blob);
                                 const a = document.createElement('a');
-                                a.href = url; a.download = 'комментарий_преподавателя.' + (blob.type.split('/')[1] || 'bin');
+                                a.href = url; a.download = fileName;
                                 document.body.appendChild(a); a.click();
                                 window.URL.revokeObjectURL(url); a.remove();
                             } catch (err) {

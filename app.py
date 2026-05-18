@@ -550,14 +550,18 @@ async def get_my_assignments(session = Depends(require_auth)):
         teacher_map = {row["subject_id"]: row["teachers"] or "—" for row in cur.fetchall()}
 
         submission_ids = [v["submission_id"] for v in submission_map.values() if v["submission_id"]]
-        has_feedback = set()
+        feedback_files_map: dict = {}
         if submission_ids:
             placeholders = ','.join(['%s'] * len(submission_ids))
             cur = conn.execute(f"""
-                SELECT submission_id FROM teacher_feedback_files
+                SELECT id, submission_id, file_path FROM teacher_feedback_files
                 WHERE submission_id IN ({placeholders})
+                ORDER BY uploaded_at
             """, submission_ids)
-            has_feedback = {row[0] for row in cur.fetchall()}
+            for row in cur.fetchall():
+                feedback_files_map.setdefault(row["submission_id"], []).append(
+                    {"id": row["id"], "name": os.path.basename(row["file_path"])}
+                )
 
         cur = conn.execute("""
             SELECT subject_id, status
@@ -589,7 +593,7 @@ async def get_my_assignments(session = Depends(require_auth)):
                 "submitted_at": submission_map[a["id"]]["submitted_at"],
                 "review": submission_map[a["id"]]["review"],
                 "submission_id": submission_map[a["id"]]["submission_id"],
-                "has_teacher_feedback": submission_map[a["id"]]["submission_id"] in has_feedback,
+                "feedback_files": feedback_files_map.get(submission_map[a["id"]]["submission_id"], []),
                 "final_grade_blocked": a["subject_id"] in grade_map,
                 "final_grade_status": grade_map.get(a["subject_id"])
             }
@@ -1060,28 +1064,24 @@ async def upload_feedback_file(
 
         return {"message": "Файл комментария сохранён"}
 
-@app.get("/api/download/feedback/{submission_id}")
-async def download_feedback_file(submission_id: int, session = Depends(require_auth)):
+@app.get("/api/download/feedback-file/{file_id}")
+async def download_feedback_file_by_id(file_id: int, session = Depends(require_auth)):
     user_id, user_type = session
     if user_type != "student":
         raise HTTPException(403, "Доступ запрещён")
 
     with get_db() as conn:
         cur = conn.execute("""
-            SELECT tf.file_path, s.student_id
+            SELECT tf.file_path
             FROM teacher_feedback_files tf
             JOIN submissions s ON tf.submission_id = s.id
-            WHERE tf.submission_id = %s
-        """, (submission_id,))
+            WHERE tf.id = %s AND s.student_id = %s
+        """, (file_id, user_id))
         row = cur.fetchone()
         if not row:
             raise HTTPException(404, "Файл не найден")
 
-        r2_key, student_id = row
-        if student_id != user_id:
-            raise HTTPException(403, "Нет доступа к этому файлу")
-
-    return _r2_stream(r2_key, os.path.basename(r2_key))
+    return _r2_stream(row[0], os.path.basename(row[0]))
 
 # ===== АДМИНИСТРАТОР =====
 
@@ -1155,7 +1155,7 @@ async def admin_stats(admin_id = Depends(require_admin)):
         teachers = conn.execute("SELECT COUNT(*) FROM teachers").fetchone()[0]
         pending = conn.execute("""
             SELECT COUNT(*) FROM submissions
-            WHERE status IN ('submitted', 'in_review', 'resubmitted')
+            WHERE status IN ('submitted', 'in_review', 'resubmitted', 'notebook_sent')
         """).fetchone()[0]
         overdue = conn.execute("""
             SELECT COUNT(*) FROM (

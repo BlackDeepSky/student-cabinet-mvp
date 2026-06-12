@@ -525,8 +525,11 @@
               <button class="btn btn-outline-success btn-sm w-100" id="assign-teacher-btn" disabled><i class="bi bi-plus-lg me-1"></i>Назначить</button>
             </div>
             <div class="col-md-6">
-              <h6 class="fw-bold">Студенты</h6>
-              <ul id="members-students-list" class="list-group mb-2" style="max-height:120px;overflow-y:auto"></ul>
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <h6 class="fw-bold mb-0">Студенты</h6>
+                <button type="button" class="btn btn-link btn-sm text-danger p-0" id="unenroll-all-btn" style="font-size:.78rem;display:none;">Убрать всех</button>
+              </div>
+              <ul id="members-students-list" class="list-group mb-2" style="max-height:220px;overflow-y:auto"></ul>
               <div class="d-flex gap-2 mb-1">
                 <select id="enroll-group-select" class="form-select form-select-sm">
                   <option value="" disabled selected>Выберите группу...</option>
@@ -700,7 +703,7 @@
     const authHeaders = () => ({ 'Authorization': `Bearer ${getToken()}` });
     const formHeaders = () => ({ 'Authorization': `Bearer ${getToken()}`, 'Content-Type': 'application/x-www-form-urlencoded' });
 
-    let allTeachers = [], allStudents = [], currentSubjectId = null;
+    let allTeachers = [], allStudents = [], currentSubjectId = null, enrolledStudents = [];
 
     function showToast(msg, type = 'success') {
       const el = document.getElementById('app-toast');
@@ -1284,6 +1287,9 @@
     async function refreshMembers(subjectId) {
       const res = await fetch(`/api/admin/subjects/${subjectId}/members`, { headers: authHeaders() });
       const data = await res.json();
+      enrolledStudents = data.students;
+      const unenrollAllBtn = document.getElementById('unenroll-all-btn');
+      unenrollAllBtn.style.display = enrolledStudents.length ? '' : 'none';
       document.getElementById('members-teachers-list').innerHTML = data.teachers.map(t => `
         <li class="list-group-item d-flex justify-content-between align-items-center py-1">
           ${t.name}
@@ -1345,6 +1351,15 @@
       await fetch(`/api/admin/subjects/${currentSubjectId}/students/${studentId}`, { method: 'DELETE', headers: authHeaders() });
       refreshMembers(currentSubjectId);
     }
+
+    document.getElementById('unenroll-all-btn').addEventListener('click', async () => {
+      if (!enrolledStudents.length) return;
+      if (!confirm(`Убрать всех ${enrolledStudents.length} студентов с предмета?`)) return;
+      await Promise.all(enrolledStudents.map(s =>
+        fetch(`/api/admin/subjects/${currentSubjectId}/students/${s.id}`, { method: 'DELETE', headers: authHeaders() })
+      ));
+      refreshMembers(currentSubjectId);
+    });
 
     // ЗАДАНИЯ
     let allAssignments = [];

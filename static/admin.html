@@ -503,7 +503,7 @@
 
   <!-- Modal: участники предмета -->
   <div class="modal fade" id="membersModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">Предмет: <span id="members-subject-name"></span></h5>
@@ -513,7 +513,7 @@
           <div class="row g-3">
             <div class="col-md-6">
               <h6 class="fw-bold">Преподаватели</h6>
-              <ul id="members-teachers-list" class="list-group mb-2"></ul>
+              <ul id="members-teachers-list" class="list-group mb-2" style="max-height:200px;overflow-y:auto"></ul>
               <div class="position-relative mb-1">
                 <input type="text" id="teacher-autocomplete" class="form-control form-control-sm" placeholder="🔍 Найти преподавателя...">
                 <div id="teacher-ac-list" class="border rounded-2 shadow-sm bg-white" style="display:none;position:absolute;width:100%;max-height:160px;overflow-y:auto;z-index:1090;top:calc(100% + 2px);left:0;"></div>
@@ -529,7 +529,7 @@
                 <h6 class="fw-bold mb-0">Студенты</h6>
                 <button type="button" class="btn btn-link btn-sm text-danger p-0" id="unenroll-all-btn" style="font-size:.78rem;display:none;">Убрать всех</button>
               </div>
-              <ul id="members-students-list" class="list-group mb-2" style="max-height:220px;overflow-y:auto"></ul>
+              <ul id="members-students-list" class="list-group mb-2"></ul>
               <div class="d-flex gap-2 mb-1">
                 <select id="enroll-group-select" class="form-select form-select-sm">
                   <option value="" disabled selected>Выберите группу...</option>

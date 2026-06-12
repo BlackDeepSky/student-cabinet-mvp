@@ -531,19 +531,17 @@
                 <select id="enroll-group-select" class="form-select form-select-sm">
                   <option value="" disabled selected>Выберите группу...</option>
                 </select>
-                <button class="btn btn-outline-primary btn-sm text-nowrap" id="enroll-group-btn">Записать</button>
-                <button class="btn btn-outline-secondary btn-sm px-2" id="enroll-group-clear" title="Сбросить группу">✕</button>
+                <button class="btn btn-outline-secondary btn-sm text-nowrap" id="enroll-group-btn">+ Группу</button>
               </div>
-              <div id="group-preview" class="mb-2 small text-muted" style="display:none;"></div>
               <div class="position-relative mb-1">
-                <input type="text" id="student-autocomplete" class="form-control form-control-sm" placeholder="🔍 Найти студента...">
+                <input type="text" id="student-autocomplete" class="form-control form-control-sm" placeholder="🔍 Добавить студента...">
                 <div id="student-ac-list" class="border rounded-2 shadow-sm bg-white" style="display:none;position:absolute;width:100%;max-height:160px;overflow-y:auto;z-index:1090;top:calc(100% + 2px);left:0;"></div>
               </div>
               <div id="student-pending" class="mb-2" style="display:none;">
                 <div class="d-flex flex-wrap gap-1 mb-1" id="student-pending-chips"></div>
                 <button type="button" id="student-pending-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.78rem;">Очистить всё</button>
               </div>
-              <button class="btn btn-outline-success btn-sm w-100" id="enroll-student-btn" disabled><i class="bi bi-plus-lg me-1"></i>Добавить</button>
+              <button class="btn btn-outline-success btn-sm w-100" id="enroll-student-btn" disabled><i class="bi bi-check-lg me-1"></i>Записать выбранных</button>
             </div>
           </div>
         </div>
@@ -1268,7 +1266,6 @@
       document.getElementById('enroll-group-select').innerHTML =
         '<option value="" disabled selected>Выберите группу...</option>' +
         groups.map(g => `<option value="${g}">${g}</option>`).join('');
-      document.getElementById('group-preview').style.display = 'none';
       await refreshMembers(subjectId);
       new bootstrap.Modal(document.getElementById('membersModal')).show();
     }
@@ -1299,34 +1296,13 @@
       refreshMembers(currentSubjectId); loadSubjects();
     });
 
-    document.getElementById('enroll-group-select').addEventListener('change', function() {
-      const group = this.value;
-      const preview = document.getElementById('group-preview');
-      if (!group) { preview.style.display = 'none'; return; }
-      const students = allStudents.filter(s => s.group_name === group);
-      const names = students.slice(0, 3).map(s => s.last_name).join(', ');
-      preview.textContent = `${students.length} студентов: ${names}${students.length > 3 ? '...' : ''}`;
-      preview.style.display = '';
-    });
-
-    document.getElementById('enroll-group-clear').addEventListener('click', () => {
-      document.getElementById('enroll-group-select').value = '';
-      document.getElementById('group-preview').style.display = 'none';
-    });
-
-    document.getElementById('enroll-group-btn').addEventListener('click', async () => {
+    document.getElementById('enroll-group-btn').addEventListener('click', () => {
       const group = document.getElementById('enroll-group-select').value;
       if (!group) return;
-      const ids = allStudents.filter(s => s.group_name === group).map(s => s.id);
-      if (!ids.length) return;
-      await fetch(`/api/admin/subjects/${currentSubjectId}/students/bulk`, {
-        method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_ids: ids })
-      });
+      allStudents
+        .filter(s => s.group_name === group)
+        .forEach(s => studentList.add({ value: s.id, label: `${s.last_name} ${s.first_name} (${s.student_id})` }));
       document.getElementById('enroll-group-select').value = '';
-      document.getElementById('group-preview').style.display = 'none';
-      refreshMembers(currentSubjectId);
     });
 
     document.getElementById('enroll-student-btn').addEventListener('click', async () => {

@@ -1111,10 +1111,21 @@
       }
       document.getElementById(prefix + '-pending-clear').addEventListener('click', () => { items.length = 0; render(); });
       return {
-        add(item) { if (!items.find(i => i.value === item.value)) { items.push(item); render(); } },
+        add(item) {
+          if (!items.some(i => String(i.value) === String(item.value))) { items.push(item); render(); return true; }
+          return false;
+        },
+        addAll(newItems) {
+          let added = 0;
+          newItems.forEach(item => {
+            if (!items.some(i => String(i.value) === String(item.value))) { items.push(item); added++; }
+          });
+          if (added) render();
+          return added;
+        },
         getValues() { return items.map(i => i.value); },
         clear() { items.length = 0; render(); },
-        has(value) { return !!items.find(i => i.value === value); }
+        has(value) { return items.some(i => String(i.value) === String(value)); }
       };
     }
 
@@ -1299,9 +1310,16 @@
     document.getElementById('enroll-group-btn').addEventListener('click', () => {
       const group = document.getElementById('enroll-group-select').value;
       if (!group) return;
-      allStudents
+      const groupStudents = allStudents
         .filter(s => s.group_name === group)
-        .forEach(s => studentList.add({ value: s.id, label: `${s.last_name} ${s.first_name} (${s.student_id})` }));
+        .map(s => ({ value: s.id, label: `${s.last_name} ${s.first_name} (${s.student_id})` }));
+      if (!groupStudents.length) { showToast('Нет студентов в группе', 'warning'); return; }
+      const added = studentList.addAll(groupStudents);
+      const skipped = groupStudents.length - added;
+      showToast(
+        added ? `Добавлено ${added}${skipped ? `, уже в списке: ${skipped}` : ''}` : `Все ${skipped} уже в списке`,
+        added ? 'success' : 'warning'
+      );
       document.getElementById('enroll-group-select').value = '';
     });
 

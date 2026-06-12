@@ -333,6 +333,7 @@
                 <h6 class="fw-bold mb-3"><i class="bi bi-envelope-fill me-2 text-success"></i>Личное сообщение студенту</h6>
                 <form id="msg-form">
                   <div class="mb-2">
+                    <input type="text" id="msg-student-search" class="form-control form-control-sm mb-1" placeholder="Поиск студента...">
                     <select id="msg-student" class="form-select form-select-sm" required>
                       <option value="">— Выберите студента —</option>
                     </select>
@@ -506,6 +507,7 @@
             <div class="col-md-6">
               <h6 class="fw-bold">Преподаватели</h6>
               <ul id="members-teachers-list" class="list-group mb-2"></ul>
+              <input type="text" id="teacher-modal-search" class="form-control form-control-sm mb-1" placeholder="Поиск преподавателя...">
               <div class="d-flex gap-2">
                 <select id="assign-teacher-select" class="form-select form-select-sm"></select>
                 <button class="btn btn-outline-success btn-sm text-nowrap" id="assign-teacher-btn">+ Назначить</button>
@@ -520,6 +522,7 @@
                 </select>
                 <button class="btn btn-outline-primary btn-sm text-nowrap" id="enroll-group-btn">Записать</button>
               </div>
+              <input type="text" id="student-modal-search" class="form-control form-control-sm mb-1" placeholder="Поиск студента...">
               <div class="d-flex gap-2">
                 <select id="enroll-student-select" class="form-select form-select-sm"></select>
                 <button class="btn btn-outline-success btn-sm text-nowrap" id="enroll-student-btn">+ Одного</button>
@@ -923,6 +926,7 @@
         const target = tabEl.getAttribute('data-bs-target');
         // Special side-effects
         if (target === '#tab-audit') loadAuditLog();
+        if (target === '#tab-announcements') { loadAnnouncements(); loadStudentsForMsgSelect(); }
         // Update mobile dropdown
         const item = document.querySelector(`#mobile-section-menu [data-target="${target}"]`);
         if (!item) return;
@@ -1074,6 +1078,28 @@
 
     document.getElementById('teacher-search').addEventListener('input', applyTeacherFilter);
 
+    document.getElementById('teacher-modal-search').addEventListener('input', function() {
+      const q = this.value.toLowerCase().trim();
+      Array.from(document.getElementById('assign-teacher-select').options).forEach(o => {
+        o.hidden = !!q && !o.text.toLowerCase().includes(q);
+      });
+    });
+
+    document.getElementById('student-modal-search').addEventListener('input', function() {
+      const q = this.value.toLowerCase().trim();
+      Array.from(document.getElementById('enroll-student-select').options).forEach(o => {
+        o.hidden = !!q && !o.text.toLowerCase().includes(q);
+      });
+    });
+
+    document.getElementById('msg-student-search').addEventListener('input', function() {
+      const q = this.value.toLowerCase().trim();
+      Array.from(document.getElementById('msg-student').options).forEach(o => {
+        if (!o.value) return;
+        o.hidden = !!q && !o.text.toLowerCase().includes(q);
+      });
+    });
+
     document.getElementById('add-teacher-btn').addEventListener('click', async () => {
       const form = document.getElementById('add-teacher-form');
       const err = document.getElementById('add-teacher-error');
@@ -1179,6 +1205,8 @@
       document.getElementById('members-subject-name').textContent = subjectName;
       document.getElementById('assign-teacher-select').innerHTML = allTeachers.map(t => `<option value="${t.id}">${t.last_name} ${t.first_name} (${t.teacher_id})</option>`).join('');
       document.getElementById('enroll-student-select').innerHTML = allStudents.map(s => `<option value="${s.id}">${s.last_name} ${s.first_name} (${s.student_id})</option>`).join('');
+      document.getElementById('teacher-modal-search').value = '';
+      document.getElementById('student-modal-search').value = '';
       const groups = [...new Set(allStudents.map(s => s.group_name).filter(Boolean))].sort();
       document.getElementById('enroll-group-select').innerHTML = '<option value="">Записать группу...</option>' + groups.map(g => `<option value="${g}">${g}</option>`).join('');
       await refreshMembers(subjectId);
@@ -1367,6 +1395,7 @@
       const sel = document.getElementById('msg-student');
       sel.innerHTML = '<option value="">— Выберите студента —</option>' +
         students.map(s => `<option value="${s.id}">${escapeHtml(s.last_name)} ${escapeHtml(s.first_name)} (${escapeHtml(s.student_id)})</option>`).join('');
+      document.getElementById('msg-student-search').value = '';
     }
 
     document.getElementById('msg-form').addEventListener('submit', async (e) => {

@@ -317,6 +317,13 @@
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body p-0">
+                        <div class="px-3 pt-3 pb-2 border-bottom">
+                            <div class="btn-group btn-group-sm w-100" role="group" id="msg-filter-group">
+                                <button type="button" class="btn btn-outline-primary active" data-filter="all">Все</button>
+                                <button type="button" class="btn btn-outline-primary" data-filter="admin">Администрация</button>
+                                <button type="button" class="btn btn-outline-primary" data-filter="teacher">Преподаватель</button>
+                            </div>
+                        </div>
                         <div id="messages-list"></div>
                         <p class="text-muted text-center py-4 d-none" id="messages-empty">Нет сообщений</p>
                     </div>
@@ -333,6 +340,14 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
+                        <div class="d-flex gap-2 mb-3 flex-wrap">
+                            <select id="grades-filter-month" class="form-select form-select-sm" style="max-width:160px">
+                                <option value="">Все месяцы</option>
+                            </select>
+                            <select id="grades-filter-year" class="form-select form-select-sm" style="max-width:110px">
+                                <option value="">Все годы</option>
+                            </select>
+                        </div>
                         <div class="table-responsive">
                             <table class="table table-hover table-sm align-middle">
                                 <thead class="table-light">
@@ -744,43 +759,76 @@
                 }
             }
 
-            async function loadGrades() {
+            let gradesData = [];
+
+            const GRADES_STATUS_CLS = {
+                approved: 'bg-success', rejected: 'bg-danger',
+                resubmitted: 'bg-warning text-dark', submitted: 'bg-secondary',
+                in_review: 'bg-warning text-dark', notebook_sent: 'bg-info text-dark',
+            };
+
+            function parseGradeDate(str) {
+                if (!str || str === '—') return null;
+                const parts = str.split(', ')[0].split('.');
+                if (parts.length < 3) return null;
+                return { month: parseInt(parts[1]), year: parseInt(parts[2]) };
+            }
+
+            function renderGrades(items) {
                 const tbody = document.getElementById('grades');
                 const emptyEl = document.getElementById('grades-empty');
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Загрузка...</td></tr>';
+                tbody.innerHTML = '';
+                if (items.length === 0) { emptyEl.classList.remove('d-none'); return; }
                 emptyEl.classList.add('d-none');
-                const statusCls = {
-                    approved:      'bg-success',
-                    rejected:      'bg-danger',
-                    resubmitted:   'bg-warning text-dark',
-                    submitted:     'bg-secondary',
-                    in_review:     'bg-warning text-dark',
-                    notebook_sent: 'bg-info text-dark',
-                };
+                items.forEach(g => {
+                    const cls = GRADES_STATUS_CLS[g.status] || 'bg-secondary';
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${escapeHtml(g.subject)}</td>
+                        <td>${escapeHtml(g.assignment_title)}</td>
+                        <td><span class="badge ${cls}">${escapeHtml(g.status_label)}</span></td>
+                        <td class="d-none d-sm-table-cell" style="font-size:.85rem">${g.submitted_at || '—'}</td>`;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            function applyGradesFilter() {
+                const m = parseInt(document.getElementById('grades-filter-month').value) || 0;
+                const y = parseInt(document.getElementById('grades-filter-year').value) || 0;
+                const filtered = gradesData.filter(g => {
+                    const d = parseGradeDate(g.submitted_at);
+                    if (!d) return !m && !y;
+                    return (!m || d.month === m) && (!y || d.year === y);
+                });
+                renderGrades(filtered);
+            }
+
+            async function loadGrades() {
+                const tbody = document.getElementById('grades');
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Загрузка...</td></tr>';
+                document.getElementById('grades-empty').classList.add('d-none');
                 try {
                     const res = await fetch('/api/grades/me', { headers: getAuthHeaders() });
                     if (res.status === 401 || res.status === 403) { handleAuthError(); return; }
                     if (!res.ok) throw new Error('Ошибка загрузки');
-                    const items = await res.json();
-                    tbody.innerHTML = '';
-                    if (items.length === 0) {
-                        emptyEl.classList.remove('d-none');
-                        return;
-                    }
-                    items.forEach(g => {
-                        const cls = statusCls[g.status] || 'bg-secondary';
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td>${escapeHtml(g.subject)}</td>
-                            <td>${escapeHtml(g.assignment_title)}</td>
-                            <td><span class="badge ${cls}">${escapeHtml(g.status_label)}</span></td>
-                            <td class="d-none d-sm-table-cell" style="font-size:.85rem">${g.submitted_at || '—'}</td>`;
-                        tbody.appendChild(tr);
-                    });
+                    gradesData = await res.json();
+
+                    const months = [...new Set(gradesData.map(g => parseGradeDate(g.submitted_at)?.month).filter(Boolean))].sort((a,b)=>a-b);
+                    const years  = [...new Set(gradesData.map(g => parseGradeDate(g.submitted_at)?.year).filter(Boolean))].sort((a,b)=>b-a);
+                    const MONTH_NAMES = ['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+                    const mSel = document.getElementById('grades-filter-month');
+                    const ySel = document.getElementById('grades-filter-year');
+                    mSel.innerHTML = '<option value="">Все месяцы</option>' + months.map(m => `<option value="${m}">${MONTH_NAMES[m]}</option>`).join('');
+                    ySel.innerHTML = '<option value="">Все годы</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+                    renderGrades(gradesData);
                 } catch (err) {
                     tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Ошибка загрузки</td></tr>';
                 }
             }
+
+            document.getElementById('grades-filter-month').addEventListener('change', applyGradesFilter);
+            document.getElementById('grades-filter-year').addEventListener('change', applyGradesFilter);
 
             document.getElementById('show-grades-btn').addEventListener('click', () => {
                 loadGrades();
@@ -825,17 +873,34 @@
                 } catch {}
             }
 
-            async function loadMessages() {
+            let messagesData = [];
+            let msgFilter = 'all';
+
+            const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+            function renderMessages(msgs) {
                 const list = document.getElementById('messages-list');
                 const emptyEl = document.getElementById('messages-empty');
                 list.innerHTML = '';
+                if (msgs.length === 0) { emptyEl.classList.remove('d-none'); return; }
                 emptyEl.classList.add('d-none');
-                try {
-                    const res = await fetch('/api/messages/me', { headers: getAuthHeaders() });
-                    if (!res.ok) throw new Error();
-                    const messages = await res.json();
-                    if (messages.length === 0) { emptyEl.classList.remove('d-none'); return; }
-                    messages.forEach(m => {
+
+                const groups = {};
+                msgs.forEach(m => {
+                    const d = new Date(m.created_at);
+                    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                    if (!groups[key]) groups[key] = { label: `${MONTHS_RU[d.getMonth()]} ${d.getFullYear()}`, msgs: [] };
+                    groups[key].msgs.push(m);
+                });
+
+                Object.keys(groups).sort().reverse().forEach(key => {
+                    const hdr = document.createElement('div');
+                    hdr.className = 'px-3 py-2 bg-light border-bottom fw-semibold text-muted';
+                    hdr.style.cssText = 'font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;';
+                    hdr.textContent = groups[key].label;
+                    list.appendChild(hdr);
+
+                    groups[key].msgs.forEach(m => {
                         const date = new Date(m.created_at).toLocaleDateString('ru-RU', { day:'2-digit', month:'long', year:'numeric' });
                         const senderIcon = m.sender_type === 'admin' ? 'bi-shield-fill' : 'bi-person-fill';
                         const div = document.createElement('div');
@@ -857,10 +922,41 @@
                         }
                         list.appendChild(div);
                     });
+                });
+            }
+
+            function applyMsgFilter() {
+                const filtered = msgFilter === 'all' ? messagesData
+                    : messagesData.filter(m => m.sender_type === msgFilter);
+                renderMessages(filtered);
+            }
+
+            async function loadMessages() {
+                const list = document.getElementById('messages-list');
+                const emptyEl = document.getElementById('messages-empty');
+                list.innerHTML = '';
+                emptyEl.classList.add('d-none');
+                try {
+                    const res = await fetch('/api/messages/me', { headers: getAuthHeaders() });
+                    if (!res.ok) throw new Error();
+                    messagesData = await res.json();
+                    msgFilter = 'all';
+                    document.querySelectorAll('#msg-filter-group button').forEach(b => b.classList.remove('active'));
+                    document.querySelector('#msg-filter-group [data-filter="all"]').classList.add('active');
+                    applyMsgFilter();
                 } catch {
                     list.innerHTML = '<p class="text-danger text-center py-3">Ошибка загрузки</p>';
                 }
             }
+
+            document.getElementById('msg-filter-group').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-filter]');
+                if (!btn) return;
+                msgFilter = btn.dataset.filter;
+                document.querySelectorAll('#msg-filter-group button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                applyMsgFilter();
+            });
 
             document.getElementById('messages-btn').addEventListener('click', () => {
                 loadMessages();

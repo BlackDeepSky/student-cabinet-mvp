@@ -340,13 +340,10 @@
                       <input type="text" id="msg-student-autocomplete" class="form-control form-control-sm" placeholder="🔍 Найти студента...">
                       <div id="msg-student-ac-list" class="border rounded-2 shadow-sm bg-white" style="display:none;position:absolute;width:100%;max-height:160px;overflow-y:auto;z-index:9999;top:calc(100% + 2px);left:0;"></div>
                     </div>
-                    <div id="msg-student-ac-selected" class="d-none">
-                      <div class="d-flex align-items-center gap-2">
-                        <span id="msg-student-ac-label" class="badge rounded-pill text-bg-success px-2 py-1" style="font-size:.8rem;font-weight:500;"></span>
-                        <button type="button" id="msg-student-ac-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.8rem;">✕ очистить</button>
-                      </div>
+                    <div id="msg-student-pending" style="display:none;">
+                      <div class="d-flex flex-wrap gap-1 mb-1" id="msg-student-pending-chips"></div>
+                      <button type="button" id="msg-student-pending-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.78rem;">Очистить всё</button>
                     </div>
-                    <input type="hidden" id="msg-student">
                   </div>
                   <div class="mb-2">
                     <input type="text" id="msg-title" class="form-control form-control-sm" placeholder="Тема сообщения" required maxlength="120">
@@ -521,36 +518,32 @@
                 <input type="text" id="teacher-autocomplete" class="form-control form-control-sm" placeholder="🔍 Найти преподавателя...">
                 <div id="teacher-ac-list" class="border rounded-2 shadow-sm bg-white" style="display:none;position:absolute;width:100%;max-height:160px;overflow-y:auto;z-index:1090;top:calc(100% + 2px);left:0;"></div>
               </div>
-              <div id="teacher-ac-selected" class="mb-2 d-none">
-                <div class="d-flex align-items-center gap-2">
-                  <span id="teacher-ac-label" class="badge rounded-pill text-bg-success px-2 py-1" style="font-size:.8rem;font-weight:500;"></span>
-                  <button type="button" id="teacher-ac-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.8rem;">✕ очистить</button>
-                </div>
+              <div id="teacher-pending" class="mb-2" style="display:none;">
+                <div class="d-flex flex-wrap gap-1 mb-1" id="teacher-pending-chips"></div>
+                <button type="button" id="teacher-pending-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.78rem;">Очистить всё</button>
               </div>
-              <input type="hidden" id="assign-teacher-select">
               <button class="btn btn-outline-success btn-sm w-100" id="assign-teacher-btn" disabled><i class="bi bi-plus-lg me-1"></i>Назначить</button>
             </div>
             <div class="col-md-6">
               <h6 class="fw-bold">Студенты</h6>
-              <ul id="members-students-list" class="list-group mb-2" style="max-height:160px;overflow-y:auto"></ul>
-              <div class="d-flex gap-2 mb-2">
+              <ul id="members-students-list" class="list-group mb-2" style="max-height:120px;overflow-y:auto"></ul>
+              <div class="d-flex gap-2 mb-1">
                 <select id="enroll-group-select" class="form-select form-select-sm">
-                  <option value="">Записать группу...</option>
+                  <option value="" disabled selected>Выберите группу...</option>
                 </select>
                 <button class="btn btn-outline-primary btn-sm text-nowrap" id="enroll-group-btn">Записать</button>
+                <button class="btn btn-outline-secondary btn-sm px-2" id="enroll-group-clear" title="Сбросить группу">✕</button>
               </div>
+              <div id="group-preview" class="mb-2 small text-muted" style="display:none;"></div>
               <div class="position-relative mb-1">
                 <input type="text" id="student-autocomplete" class="form-control form-control-sm" placeholder="🔍 Найти студента...">
                 <div id="student-ac-list" class="border rounded-2 shadow-sm bg-white" style="display:none;position:absolute;width:100%;max-height:160px;overflow-y:auto;z-index:1090;top:calc(100% + 2px);left:0;"></div>
               </div>
-              <div id="student-ac-selected" class="mb-2 d-none">
-                <div class="d-flex align-items-center gap-2">
-                  <span id="student-ac-label" class="badge rounded-pill text-bg-success px-2 py-1" style="font-size:.8rem;font-weight:500;"></span>
-                  <button type="button" id="student-ac-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.8rem;">✕ очистить</button>
-                </div>
+              <div id="student-pending" class="mb-2" style="display:none;">
+                <div class="d-flex flex-wrap gap-1 mb-1" id="student-pending-chips"></div>
+                <button type="button" id="student-pending-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.78rem;">Очистить всё</button>
               </div>
-              <input type="hidden" id="enroll-student-select">
-              <button class="btn btn-outline-success btn-sm w-100" id="enroll-student-btn" disabled><i class="bi bi-plus-lg me-1"></i>Одного</button>
+              <button class="btn btn-outline-success btn-sm w-100" id="enroll-student-btn" disabled><i class="bi bi-plus-lg me-1"></i>Добавить</button>
             </div>
           </div>
         </div>
@@ -1102,72 +1095,65 @@
 
     document.getElementById('teacher-search').addEventListener('input', applyTeacherFilter);
 
-    function setupAc(cfg) {
-      const input = document.getElementById(cfg.inputId);
-      const list  = document.getElementById(cfg.listId);
+    function makePendingList(prefix, actionBtnId) {
+      const items = [];
+      const pendingEl = document.getElementById(prefix + '-pending');
+      const chipsEl   = document.getElementById(prefix + '-pending-chips');
+      const actionBtn = actionBtnId ? document.getElementById(actionBtnId) : null;
+      function render() {
+        pendingEl.style.display = items.length ? '' : 'none';
+        if (actionBtn) actionBtn.disabled = !items.length;
+        chipsEl.innerHTML = items.map((item, i) => {
+          const name = item.label.split('(')[0].trim();
+          return `<span class="badge rounded-pill text-bg-success d-inline-flex align-items-center gap-1 px-2 py-1" style="font-size:.75rem;font-weight:500;">${escapeHtml(name)}<button class="btn-close btn-close-white remove-chip" style="font-size:.45rem;" data-idx="${i}"></button></span>`;
+        }).join('');
+        chipsEl.querySelectorAll('.remove-chip').forEach(btn => {
+          btn.addEventListener('click', () => { items.splice(parseInt(btn.dataset.idx), 1); render(); });
+        });
+      }
+      document.getElementById(prefix + '-pending-clear').addEventListener('click', () => { items.length = 0; render(); });
+      return {
+        add(item) { if (!items.find(i => i.value === item.value)) { items.push(item); render(); } },
+        getValues() { return items.map(i => i.value); },
+        clear() { items.length = 0; render(); },
+        has(value) { return !!items.find(i => i.value === value); }
+      };
+    }
+
+    function setupMultiAc(inputId, listId, getData, pending, onAdd) {
+      const input = document.getElementById(inputId);
+      const list  = document.getElementById(listId);
       input.addEventListener('input', () => {
         const q = input.value.toLowerCase().trim();
         list.innerHTML = '';
         if (!q) { list.style.display = 'none'; return; }
-        const hits = cfg.getData().filter(d => d.label.toLowerCase().includes(q)).slice(0, 8);
+        const hits = getData().filter(d => !pending.has(d.value) && d.label.toLowerCase().includes(q)).slice(0, 8);
         if (!hits.length) { list.style.display = 'none'; return; }
         hits.forEach(item => {
           const div = document.createElement('div');
           div.className = 'ac-item';
           div.textContent = item.label;
-          div.addEventListener('mousedown', e => {
-            e.preventDefault();
-            input.value = '';
-            list.style.display = 'none';
-            document.getElementById(cfg.hiddenId).value = item.value;
-            document.getElementById(cfg.labelId).textContent = item.label;
-            document.getElementById(cfg.selectedId).classList.remove('d-none');
-            if (cfg.btnId) document.getElementById(cfg.btnId).disabled = false;
-          });
+          div.addEventListener('mousedown', e => { e.preventDefault(); input.value = ''; list.style.display = 'none'; onAdd(item); });
           list.appendChild(div);
         });
         list.style.display = 'block';
       });
       input.addEventListener('blur', () => setTimeout(() => { list.style.display = 'none'; }, 150));
-      document.getElementById(cfg.clearId).addEventListener('click', () => {
-        input.value = '';
-        document.getElementById(cfg.hiddenId).value = '';
-        document.getElementById(cfg.selectedId).classList.add('d-none');
-        if (cfg.btnId) document.getElementById(cfg.btnId).disabled = true;
-      });
     }
 
-    function resetAc(prefix) {
-      const isMsg = prefix === 'msg-student';
-      const inp = document.getElementById(isMsg ? 'msg-student-autocomplete' : prefix + '-autocomplete');
-      if (inp) inp.value = '';
-      const lst = document.getElementById(isMsg ? 'msg-student-ac-list' : prefix + '-ac-list');
-      if (lst) lst.style.display = 'none';
-      document.getElementById(isMsg ? 'msg-student-ac-selected' : prefix + '-ac-selected').classList.add('d-none');
-      const hiddenId = prefix === 'teacher' ? 'assign-teacher-select' : prefix === 'student' ? 'enroll-student-select' : 'msg-student';
-      document.getElementById(hiddenId).value = '';
-      if (prefix === 'teacher') document.getElementById('assign-teacher-btn').disabled = true;
-      if (prefix === 'student') document.getElementById('enroll-student-btn').disabled = true;
-    }
+    const teacherList    = makePendingList('teacher', 'assign-teacher-btn');
+    const studentList    = makePendingList('student', 'enroll-student-btn');
+    const msgStudentList = makePendingList('msg-student', null);
 
-    setupAc({
-      inputId: 'teacher-autocomplete', listId: 'teacher-ac-list',
-      hiddenId: 'assign-teacher-select', labelId: 'teacher-ac-label',
-      selectedId: 'teacher-ac-selected', clearId: 'teacher-ac-clear', btnId: 'assign-teacher-btn',
-      getData: () => allTeachers.map(t => ({ value: t.id, label: `${t.last_name} ${t.first_name} (${t.teacher_id})` }))
-    });
-    setupAc({
-      inputId: 'student-autocomplete', listId: 'student-ac-list',
-      hiddenId: 'enroll-student-select', labelId: 'student-ac-label',
-      selectedId: 'student-ac-selected', clearId: 'student-ac-clear', btnId: 'enroll-student-btn',
-      getData: () => allStudents.map(s => ({ value: s.id, label: `${s.last_name} ${s.first_name} (${s.student_id})` }))
-    });
-    setupAc({
-      inputId: 'msg-student-autocomplete', listId: 'msg-student-ac-list',
-      hiddenId: 'msg-student', labelId: 'msg-student-ac-label',
-      selectedId: 'msg-student-ac-selected', clearId: 'msg-student-ac-clear', btnId: null,
-      getData: () => allStudents.map(s => ({ value: s.id, label: `${s.last_name} ${s.first_name} (${s.student_id})` }))
-    });
+    setupMultiAc('teacher-autocomplete', 'teacher-ac-list',
+      () => allTeachers.map(t => ({ value: t.id, label: `${t.last_name} ${t.first_name} (${t.teacher_id})` })),
+      teacherList, item => teacherList.add(item));
+    setupMultiAc('student-autocomplete', 'student-ac-list',
+      () => allStudents.map(s => ({ value: s.id, label: `${s.last_name} ${s.first_name} (${s.student_id})` })),
+      studentList, item => studentList.add(item));
+    setupMultiAc('msg-student-autocomplete', 'msg-student-ac-list',
+      () => allStudents.map(s => ({ value: s.id, label: `${s.last_name} ${s.first_name} (${s.student_id})` })),
+      msgStudentList, item => msgStudentList.add(item));
 
     document.getElementById('add-teacher-btn').addEventListener('click', async () => {
       const form = document.getElementById('add-teacher-form');
@@ -1272,10 +1258,17 @@
     async function openMembers(subjectId, subjectName) {
       currentSubjectId = subjectId;
       document.getElementById('members-subject-name').textContent = subjectName;
-      resetAc('teacher');
-      resetAc('student');
+      teacherList.clear();
+      studentList.clear();
+      document.getElementById('teacher-autocomplete').value = '';
+      document.getElementById('teacher-ac-list').style.display = 'none';
+      document.getElementById('student-autocomplete').value = '';
+      document.getElementById('student-ac-list').style.display = 'none';
       const groups = [...new Set(allStudents.map(s => s.group_name).filter(Boolean))].sort();
-      document.getElementById('enroll-group-select').innerHTML = '<option value="">Записать группу...</option>' + groups.map(g => `<option value="${g}">${g}</option>`).join('');
+      document.getElementById('enroll-group-select').innerHTML =
+        '<option value="" disabled selected>Выберите группу...</option>' +
+        groups.map(g => `<option value="${g}">${g}</option>`).join('');
+      document.getElementById('group-preview').style.display = 'none';
       await refreshMembers(subjectId);
       new bootstrap.Modal(document.getElementById('membersModal')).show();
     }
@@ -1296,11 +1289,29 @@
     }
 
     document.getElementById('assign-teacher-btn').addEventListener('click', async () => {
-      const teacherId = document.getElementById('assign-teacher-select').value;
-      if (!teacherId) return;
-      await fetch(`/api/admin/subjects/${currentSubjectId}/teachers`, { method: 'POST', headers: formHeaders(), body: new URLSearchParams({ teacher_id: teacherId }) });
-      resetAc('teacher');
+      const ids = teacherList.getValues();
+      if (!ids.length) return;
+      await Promise.all(ids.map(id =>
+        fetch(`/api/admin/subjects/${currentSubjectId}/teachers`, { method: 'POST', headers: formHeaders(), body: new URLSearchParams({ teacher_id: id }) })
+      ));
+      teacherList.clear();
+      document.getElementById('teacher-autocomplete').value = '';
       refreshMembers(currentSubjectId); loadSubjects();
+    });
+
+    document.getElementById('enroll-group-select').addEventListener('change', function() {
+      const group = this.value;
+      const preview = document.getElementById('group-preview');
+      if (!group) { preview.style.display = 'none'; return; }
+      const students = allStudents.filter(s => s.group_name === group);
+      const names = students.slice(0, 3).map(s => s.last_name).join(', ');
+      preview.textContent = `${students.length} студентов: ${names}${students.length > 3 ? '...' : ''}`;
+      preview.style.display = '';
+    });
+
+    document.getElementById('enroll-group-clear').addEventListener('click', () => {
+      document.getElementById('enroll-group-select').value = '';
+      document.getElementById('group-preview').style.display = 'none';
     });
 
     document.getElementById('enroll-group-btn').addEventListener('click', async () => {
@@ -1313,14 +1324,21 @@
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ student_ids: ids })
       });
+      document.getElementById('enroll-group-select').value = '';
+      document.getElementById('group-preview').style.display = 'none';
       refreshMembers(currentSubjectId);
     });
 
     document.getElementById('enroll-student-btn').addEventListener('click', async () => {
-      const studentId = document.getElementById('enroll-student-select').value;
-      if (!studentId) return;
-      await fetch(`/api/admin/subjects/${currentSubjectId}/students`, { method: 'POST', headers: formHeaders(), body: new URLSearchParams({ student_id: studentId }) });
-      resetAc('student');
+      const ids = studentList.getValues();
+      if (!ids.length) return;
+      await fetch(`/api/admin/subjects/${currentSubjectId}/students/bulk`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_ids: ids })
+      });
+      studentList.clear();
+      document.getElementById('student-autocomplete').value = '';
       refreshMembers(currentSubjectId);
     });
 
@@ -1458,26 +1476,29 @@
     });
 
     function loadStudentsForMsgSelect() {
-      resetAc('msg-student');
+      msgStudentList.clear();
+      const inp = document.getElementById('msg-student-autocomplete');
+      if (inp) inp.value = '';
+      const lst = document.getElementById('msg-student-ac-list');
+      if (lst) lst.style.display = 'none';
     }
 
     document.getElementById('msg-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const studentId = document.getElementById('msg-student').value;
-      if (!studentId) { showToast('Выберите студента', 'warning'); return; }
-      const body = new URLSearchParams({
-        student_id: studentId,
-        title: document.getElementById('msg-title').value,
-        body: document.getElementById('msg-body').value,
-      });
-      const res = await fetch('/api/messages/send', { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-      if (res.ok) {
-        e.target.reset();
-        resetAc('msg-student');
-        showToast('Сообщение отправлено');
-      } else {
-        showToast('Ошибка отправки', 'danger');
-      }
+      const ids = msgStudentList.getValues();
+      if (!ids.length) { showToast('Выберите студентов', 'warning'); return; }
+      const title = document.getElementById('msg-title').value;
+      const msgBody = document.getElementById('msg-body').value;
+      await Promise.all(ids.map(id =>
+        fetch('/api/messages/send', {
+          method: 'POST',
+          headers: { ...authHeaders(), 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ student_id: id, title, body: msgBody })
+        })
+      ));
+      e.target.reset();
+      msgStudentList.clear();
+      showToast('Сообщение отправлено');
     });
 
     document.getElementById('ann-tab-btn').addEventListener('click', () => {

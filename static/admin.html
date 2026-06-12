@@ -102,6 +102,9 @@
     .detail-card { background:#fff; border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 0.5rem; border: 1px solid #e9ecef; transition: box-shadow .12s; }
     .detail-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
     .toast-container { z-index: 9999; }
+    .ac-item { font-size:.85rem; cursor:pointer; padding:.45rem .75rem; border-bottom:1px solid #f0f0f0; transition:background .1s; }
+    .ac-item:last-child { border-bottom:none; }
+    .ac-item:hover { background:#f8f9fa; }
   </style>
 </head>
 <body>
@@ -333,10 +336,17 @@
                 <h6 class="fw-bold mb-3"><i class="bi bi-envelope-fill me-2 text-success"></i>Личное сообщение студенту</h6>
                 <form id="msg-form">
                   <div class="mb-2">
-                    <input type="text" id="msg-student-search" class="form-control form-control-sm mb-1" placeholder="Поиск студента...">
-                    <select id="msg-student" class="form-select form-select-sm" required>
-                      <option value="">— Выберите студента —</option>
-                    </select>
+                    <div class="position-relative mb-1">
+                      <input type="text" id="msg-student-autocomplete" class="form-control form-control-sm" placeholder="🔍 Найти студента...">
+                      <div id="msg-student-ac-list" class="border rounded-2 shadow-sm bg-white" style="display:none;position:absolute;width:100%;max-height:160px;overflow-y:auto;z-index:9999;top:calc(100% + 2px);left:0;"></div>
+                    </div>
+                    <div id="msg-student-ac-selected" class="d-none">
+                      <div class="d-flex align-items-center gap-2">
+                        <span id="msg-student-ac-label" class="badge rounded-pill text-bg-success px-2 py-1" style="font-size:.8rem;font-weight:500;"></span>
+                        <button type="button" id="msg-student-ac-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.8rem;">✕ очистить</button>
+                      </div>
+                    </div>
+                    <input type="hidden" id="msg-student">
                   </div>
                   <div class="mb-2">
                     <input type="text" id="msg-title" class="form-control form-control-sm" placeholder="Тема сообщения" required maxlength="120">
@@ -507,11 +517,18 @@
             <div class="col-md-6">
               <h6 class="fw-bold">Преподаватели</h6>
               <ul id="members-teachers-list" class="list-group mb-2"></ul>
-              <input type="text" id="teacher-modal-search" class="form-control form-control-sm mb-1" placeholder="Поиск преподавателя...">
-              <div class="d-flex gap-2">
-                <select id="assign-teacher-select" class="form-select form-select-sm"></select>
-                <button class="btn btn-outline-success btn-sm text-nowrap" id="assign-teacher-btn">+ Назначить</button>
+              <div class="position-relative mb-1">
+                <input type="text" id="teacher-autocomplete" class="form-control form-control-sm" placeholder="🔍 Найти преподавателя...">
+                <div id="teacher-ac-list" class="border rounded-2 shadow-sm bg-white" style="display:none;position:absolute;width:100%;max-height:160px;overflow-y:auto;z-index:1090;top:calc(100% + 2px);left:0;"></div>
               </div>
+              <div id="teacher-ac-selected" class="mb-2 d-none">
+                <div class="d-flex align-items-center gap-2">
+                  <span id="teacher-ac-label" class="badge rounded-pill text-bg-success px-2 py-1" style="font-size:.8rem;font-weight:500;"></span>
+                  <button type="button" id="teacher-ac-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.8rem;">✕ очистить</button>
+                </div>
+              </div>
+              <input type="hidden" id="assign-teacher-select">
+              <button class="btn btn-outline-success btn-sm w-100" id="assign-teacher-btn" disabled><i class="bi bi-plus-lg me-1"></i>Назначить</button>
             </div>
             <div class="col-md-6">
               <h6 class="fw-bold">Студенты</h6>
@@ -522,11 +539,18 @@
                 </select>
                 <button class="btn btn-outline-primary btn-sm text-nowrap" id="enroll-group-btn">Записать</button>
               </div>
-              <input type="text" id="student-modal-search" class="form-control form-control-sm mb-1" placeholder="Поиск студента...">
-              <div class="d-flex gap-2">
-                <select id="enroll-student-select" class="form-select form-select-sm"></select>
-                <button class="btn btn-outline-success btn-sm text-nowrap" id="enroll-student-btn">+ Одного</button>
+              <div class="position-relative mb-1">
+                <input type="text" id="student-autocomplete" class="form-control form-control-sm" placeholder="🔍 Найти студента...">
+                <div id="student-ac-list" class="border rounded-2 shadow-sm bg-white" style="display:none;position:absolute;width:100%;max-height:160px;overflow-y:auto;z-index:1090;top:calc(100% + 2px);left:0;"></div>
               </div>
+              <div id="student-ac-selected" class="mb-2 d-none">
+                <div class="d-flex align-items-center gap-2">
+                  <span id="student-ac-label" class="badge rounded-pill text-bg-success px-2 py-1" style="font-size:.8rem;font-weight:500;"></span>
+                  <button type="button" id="student-ac-clear" class="btn btn-link btn-sm text-muted p-0" style="font-size:.8rem;">✕ очистить</button>
+                </div>
+              </div>
+              <input type="hidden" id="enroll-student-select">
+              <button class="btn btn-outline-success btn-sm w-100" id="enroll-student-btn" disabled><i class="bi bi-plus-lg me-1"></i>Одного</button>
             </div>
           </div>
         </div>
@@ -1078,26 +1102,71 @@
 
     document.getElementById('teacher-search').addEventListener('input', applyTeacherFilter);
 
-    document.getElementById('teacher-modal-search').addEventListener('input', function() {
-      const q = this.value.toLowerCase().trim();
-      Array.from(document.getElementById('assign-teacher-select').options).forEach(o => {
-        o.hidden = !!q && !o.text.toLowerCase().includes(q);
+    function setupAc(cfg) {
+      const input = document.getElementById(cfg.inputId);
+      const list  = document.getElementById(cfg.listId);
+      input.addEventListener('input', () => {
+        const q = input.value.toLowerCase().trim();
+        list.innerHTML = '';
+        if (!q) { list.style.display = 'none'; return; }
+        const hits = cfg.getData().filter(d => d.label.toLowerCase().includes(q)).slice(0, 8);
+        if (!hits.length) { list.style.display = 'none'; return; }
+        hits.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'ac-item';
+          div.textContent = item.label;
+          div.addEventListener('mousedown', e => {
+            e.preventDefault();
+            input.value = '';
+            list.style.display = 'none';
+            document.getElementById(cfg.hiddenId).value = item.value;
+            document.getElementById(cfg.labelId).textContent = item.label;
+            document.getElementById(cfg.selectedId).classList.remove('d-none');
+            if (cfg.btnId) document.getElementById(cfg.btnId).disabled = false;
+          });
+          list.appendChild(div);
+        });
+        list.style.display = 'block';
       });
-    });
+      input.addEventListener('blur', () => setTimeout(() => { list.style.display = 'none'; }, 150));
+      document.getElementById(cfg.clearId).addEventListener('click', () => {
+        input.value = '';
+        document.getElementById(cfg.hiddenId).value = '';
+        document.getElementById(cfg.selectedId).classList.add('d-none');
+        if (cfg.btnId) document.getElementById(cfg.btnId).disabled = true;
+      });
+    }
 
-    document.getElementById('student-modal-search').addEventListener('input', function() {
-      const q = this.value.toLowerCase().trim();
-      Array.from(document.getElementById('enroll-student-select').options).forEach(o => {
-        o.hidden = !!q && !o.text.toLowerCase().includes(q);
-      });
-    });
+    function resetAc(prefix) {
+      const isMsg = prefix === 'msg-student';
+      const inp = document.getElementById(isMsg ? 'msg-student-autocomplete' : prefix + '-autocomplete');
+      if (inp) inp.value = '';
+      const lst = document.getElementById(isMsg ? 'msg-student-ac-list' : prefix + '-ac-list');
+      if (lst) lst.style.display = 'none';
+      document.getElementById(isMsg ? 'msg-student-ac-selected' : prefix + '-ac-selected').classList.add('d-none');
+      const hiddenId = prefix === 'teacher' ? 'assign-teacher-select' : prefix === 'student' ? 'enroll-student-select' : 'msg-student';
+      document.getElementById(hiddenId).value = '';
+      if (prefix === 'teacher') document.getElementById('assign-teacher-btn').disabled = true;
+      if (prefix === 'student') document.getElementById('enroll-student-btn').disabled = true;
+    }
 
-    document.getElementById('msg-student-search').addEventListener('input', function() {
-      const q = this.value.toLowerCase().trim();
-      Array.from(document.getElementById('msg-student').options).forEach(o => {
-        if (!o.value) return;
-        o.hidden = !!q && !o.text.toLowerCase().includes(q);
-      });
+    setupAc({
+      inputId: 'teacher-autocomplete', listId: 'teacher-ac-list',
+      hiddenId: 'assign-teacher-select', labelId: 'teacher-ac-label',
+      selectedId: 'teacher-ac-selected', clearId: 'teacher-ac-clear', btnId: 'assign-teacher-btn',
+      getData: () => allTeachers.map(t => ({ value: t.id, label: `${t.last_name} ${t.first_name} (${t.teacher_id})` }))
+    });
+    setupAc({
+      inputId: 'student-autocomplete', listId: 'student-ac-list',
+      hiddenId: 'enroll-student-select', labelId: 'student-ac-label',
+      selectedId: 'student-ac-selected', clearId: 'student-ac-clear', btnId: 'enroll-student-btn',
+      getData: () => allStudents.map(s => ({ value: s.id, label: `${s.last_name} ${s.first_name} (${s.student_id})` }))
+    });
+    setupAc({
+      inputId: 'msg-student-autocomplete', listId: 'msg-student-ac-list',
+      hiddenId: 'msg-student', labelId: 'msg-student-ac-label',
+      selectedId: 'msg-student-ac-selected', clearId: 'msg-student-ac-clear', btnId: null,
+      getData: () => allStudents.map(s => ({ value: s.id, label: `${s.last_name} ${s.first_name} (${s.student_id})` }))
     });
 
     document.getElementById('add-teacher-btn').addEventListener('click', async () => {
@@ -1203,10 +1272,8 @@
     async function openMembers(subjectId, subjectName) {
       currentSubjectId = subjectId;
       document.getElementById('members-subject-name').textContent = subjectName;
-      document.getElementById('assign-teacher-select').innerHTML = allTeachers.map(t => `<option value="${t.id}">${t.last_name} ${t.first_name} (${t.teacher_id})</option>`).join('');
-      document.getElementById('enroll-student-select').innerHTML = allStudents.map(s => `<option value="${s.id}">${s.last_name} ${s.first_name} (${s.student_id})</option>`).join('');
-      document.getElementById('teacher-modal-search').value = '';
-      document.getElementById('student-modal-search').value = '';
+      resetAc('teacher');
+      resetAc('student');
       const groups = [...new Set(allStudents.map(s => s.group_name).filter(Boolean))].sort();
       document.getElementById('enroll-group-select').innerHTML = '<option value="">Записать группу...</option>' + groups.map(g => `<option value="${g}">${g}</option>`).join('');
       await refreshMembers(subjectId);
@@ -1232,6 +1299,7 @@
       const teacherId = document.getElementById('assign-teacher-select').value;
       if (!teacherId) return;
       await fetch(`/api/admin/subjects/${currentSubjectId}/teachers`, { method: 'POST', headers: formHeaders(), body: new URLSearchParams({ teacher_id: teacherId }) });
+      resetAc('teacher');
       refreshMembers(currentSubjectId); loadSubjects();
     });
 
@@ -1252,6 +1320,7 @@
       const studentId = document.getElementById('enroll-student-select').value;
       if (!studentId) return;
       await fetch(`/api/admin/subjects/${currentSubjectId}/students`, { method: 'POST', headers: formHeaders(), body: new URLSearchParams({ student_id: studentId }) });
+      resetAc('student');
       refreshMembers(currentSubjectId);
     });
 
@@ -1388,26 +1457,23 @@
       }
     });
 
-    async function loadStudentsForMsgSelect() {
-      const res = await fetch('/api/admin/students', { headers: authHeaders() });
-      if (!res.ok) return;
-      const students = await res.json();
-      const sel = document.getElementById('msg-student');
-      sel.innerHTML = '<option value="">— Выберите студента —</option>' +
-        students.map(s => `<option value="${s.id}">${escapeHtml(s.last_name)} ${escapeHtml(s.first_name)} (${escapeHtml(s.student_id)})</option>`).join('');
-      document.getElementById('msg-student-search').value = '';
+    function loadStudentsForMsgSelect() {
+      resetAc('msg-student');
     }
 
     document.getElementById('msg-form').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const studentId = document.getElementById('msg-student').value;
+      if (!studentId) { showToast('Выберите студента', 'warning'); return; }
       const body = new URLSearchParams({
-        student_id: document.getElementById('msg-student').value,
+        student_id: studentId,
         title: document.getElementById('msg-title').value,
         body: document.getElementById('msg-body').value,
       });
       const res = await fetch('/api/messages/send', { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/x-www-form-urlencoded' }, body });
       if (res.ok) {
         e.target.reset();
+        resetAc('msg-student');
         showToast('Сообщение отправлено');
       } else {
         showToast('Ошибка отправки', 'danger');

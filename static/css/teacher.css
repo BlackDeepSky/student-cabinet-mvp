@@ -1,0 +1,88 @@
+:root { --brand: #198754; --brand-dark: #146c43; }
+body { background: #f0f4f8; min-height: 100vh; font-family: 'Inter', system-ui, -apple-system, sans-serif; overflow-x: hidden; }
+
+.app-navbar {
+  background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+  padding: 0 1rem;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 12px rgba(25, 135, 84, .35);
+}
+.app-navbar .brand {
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.app-navbar .brand i { font-size: 1.3rem; }
+.app-navbar .role-badge { background: rgba(255,255,255,.2); color: #fff; font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; letter-spacing: .06em; text-transform: uppercase; }
+@media (max-width: 400px) {
+  .app-navbar .brand-text { display: none; }
+  .app-navbar .role-badge { display: none; }
+}
+.app-navbar .nav-actions { display: flex; gap: 8px; align-items: center; }
+.app-navbar .teacher-name { color: rgba(255,255,255,.85); font-size: .9rem; }
+
+.login-wrapper {
+  min-height: calc(100vh - 56px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+.login-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,.10);
+  padding: 2.5rem 2rem;
+  width: 100%;
+  max-width: 400px;
+  border-top: 3px solid var(--brand);
+}
+.login-card .login-icon {
+  width: 56px; height: 56px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 1.25rem;
+}
+.login-card .login-icon i { color: #fff; font-size: 1.6rem; }
+.login-card h2 { text-align: center; font-size: 1.4rem; font-weight: 700; margin-bottom: .25rem; letter-spacing: -0.01em; }
+.login-card .login-sub { text-align: center; color: var(--brand); font-size: 1rem; font-weight: 600; margin-bottom: 1.5rem; }
+
+.status-badge { font-size: .8em; padding: .2em .55em; border-radius: .25rem; margin-left: 6px; vertical-align: middle; font-weight: 500; }
+.status-submitted  { background: #e9ecef; color: #495057; }
+.status-in_review  { background: #fff3cd; color: #856404; }
+.status-approved   { background: #d1e7dd; color: #0a3622; }
+.status-rejected   { background: #f8d7da; color: #58151c; }
+
+.section-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.07);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.table { margin-bottom: 0; }
+.toast-container { z-index: 9999; }
+.history-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,.09); }
+
+.stat-card { background:#fff; border-radius:12px; padding:1.1rem 1rem; box-shadow:0 1px 6px rgba(0,0,0,.07); text-align:center; height:100%; }
+.stat-icon { width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin:0 auto .5rem; }
+.stat-green  { background:#d1fae5;color:#059669; }
+.stat-yellow { background:#fef3c7;color:#d97706; }
+.stat-red    { background:#fee2e2;color:#dc2626; }
+.stat-value  { font-size:1.6rem;font-weight:700;line-height:1.1;margin-bottom:.12rem; }
+.stat-label  { font-size:.76rem;color:#6c757d;font-weight:500; }
+.stat-card-clickable { cursor:pointer;transition:box-shadow .15s,transform .1s; }
+.stat-card-clickable:hover { box-shadow:0 4px 16px rgba(0,0,0,.12);transform:translateY(-2px); }
+
+.sub-card { background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.07);overflow:hidden;height:100%;display:flex;flex-direction:column;transition:box-shadow .15s; }
+.sub-card:hover { box-shadow:0 3px 14px rgba(0,0,0,.10); }
+.sub-card-strip { height:4px;flex-shrink:0; }
+.sub-card-body { padding:.9rem 1rem;flex:1;display:flex;flex-direction:column; }

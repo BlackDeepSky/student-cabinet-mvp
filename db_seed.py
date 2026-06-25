@@ -142,11 +142,19 @@ def seed_data():
                 """, subject_teacher_links)
 
                 # === Администратор ===
-                cur.execute("""
-                    INSERT INTO admins (admin_id, password_hash)
-                    VALUES (%s, %s)
-                    ON CONFLICT DO NOTHING
-                """, ("admin", hash_password("admin1234")))
+                # Пароль берём из ADMIN_PASSWORD. Без него админа не создаём,
+                # чтобы не оставлять известный дефолтный пароль в проде.
+                admin_password = os.environ.get("ADMIN_PASSWORD", "")
+                if admin_password:
+                    admin_login = os.environ.get("ADMIN_LOGIN", "admin")
+                    cur.execute("""
+                        INSERT INTO admins (admin_id, password_hash)
+                        VALUES (%s, %s)
+                        ON CONFLICT DO NOTHING
+                    """, (admin_login, hash_password(admin_password)))
+                else:
+                    print("⚠️  ADMIN_PASSWORD не задан — администратор не создан. "
+                          "Задайте ADMIN_PASSWORD в окружении и пересоздайте сид.")
 
                 print("✅ Тестовые данные успешно добавлены.")
 

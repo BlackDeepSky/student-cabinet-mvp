@@ -224,6 +224,8 @@ def create_session(user_id: int, user_type: str) -> str:
     expires_at = datetime.now() + timedelta(hours=SESSION_EXPIRE_HOURS)
 
     with get_db() as conn:
+        # Заодно подчищаем все протухшие сессии, чтобы таблица не росла
+        conn.execute("DELETE FROM sessions WHERE expires_at <= %s", (datetime.now(),))
         conn.execute("DELETE FROM sessions WHERE user_id = %s AND user_type = %s", (user_id, user_type))
         conn.execute("""
             INSERT INTO sessions (token, user_id, user_type, expires_at)
@@ -434,7 +436,7 @@ async def submit_work(
             ext = os.path.splitext(file.filename)[1].lower()
             if ext not in ALLOWED_EXTENSIONS:
                 raise HTTPException(400, f"Тип файла «{ext}» не разрешён. Допустимые форматы: PDF, DOC, DOCX, XLS, XLSX, ZIP, PNG, JPG и др.")
-            if file.size > MAX_FILE_SIZE:
+            if (file.size or 0) > MAX_FILE_SIZE:
                 raise HTTPException(400, f"Файл {file.filename} слишком большой (макс. 10 МБ)")
             safe_name = sanitize_filename(file.filename)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1065,7 +1067,10 @@ async def upload_feedback_file(
     clean_student_id = validate_id(student_id)
     if not file.filename:
         raise HTTPException(400, "Файл не выбран")
-    if file.size > MAX_FILE_SIZE:
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"Тип файла «{ext}» не разрешён")
+    if (file.size or 0) > MAX_FILE_SIZE:
         raise HTTPException(400, "Файл слишком большой (макс. 10 МБ)")
 
     with get_db() as conn:
@@ -1949,6 +1954,18 @@ async def send_personal_message(
         ).fetchone()
         if not st:
             raise HTTPException(404, "Студент не найден")
+
+        # Преподаватель может писать только студентам со своих предметов
+        if user_type == "teacher":
+            allowed = conn.execute("""
+                SELECT 1
+                FROM student_subjects ss
+                JOIN subject_teachers st_link ON st_link.subject_id = ss.subject_id
+                WHERE ss.student_id = %s AND st_link.teacher_id = %s
+                LIMIT 1
+            """, (student_id, user_id)).fetchone()
+            if not allowed:
+                raise HTTPException(403, "Этот студент не учится на ваших предметах")
 
         conn.execute("""
             INSERT INTO personal_messages (student_id, title, body, sender_type, sender_name)

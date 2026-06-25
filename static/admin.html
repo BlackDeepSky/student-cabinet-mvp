@@ -966,10 +966,10 @@
     function renderStudents(data) {
       document.getElementById('students-tbody').innerHTML = data.length ? data.map(s => `
         <tr>
-          <td><code>${s.student_id}</code></td>
-          <td>${s.last_name} ${s.first_name}${s.patronymic ? ' ' + s.patronymic : ''}</td>
-          <td>${s.group_name || '—'}</td>
-          <td>${s.email || '—'}</td>
+          <td><code>${escapeHtml(s.student_id)}</code></td>
+          <td>${escapeHtml(s.last_name)} ${escapeHtml(s.first_name)}${s.patronymic ? ' ' + escapeHtml(s.patronymic) : ''}</td>
+          <td>${escapeHtml(s.group_name || '—')}</td>
+          <td>${escapeHtml(s.email || '—')}</td>
           <td class="text-nowrap">
             <button class="btn btn-outline-primary btn-sm" onclick="openEditStudent(${s.id})" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button class="btn btn-outline-secondary btn-sm" onclick="resetStudentPassword(${s.id})" title="Сбросить пароль"><i class="bi bi-key"></i></button>
@@ -995,7 +995,7 @@
       const groups = [...new Set(allStudents.map(s => s.group_name).filter(Boolean))].sort();
       const gf = document.getElementById('student-group-filter');
       const prev = gf.value;
-      gf.innerHTML = '<option value="">Все группы</option>' + groups.map(g => `<option value="${g}">${g}</option>`).join('');
+      gf.innerHTML = '<option value="">Все группы</option>' + groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
       gf.value = prev;
       applyStudentFilter();
     }
@@ -1070,9 +1070,9 @@
     function renderTeachers(data) {
       document.getElementById('teachers-tbody').innerHTML = data.length ? data.map(t => `
         <tr>
-          <td><code>${t.teacher_id}</code></td>
-          <td>${t.last_name} ${t.first_name}${t.patronymic ? ' ' + t.patronymic : ''}</td>
-          <td>${t.email || '—'}</td>
+          <td><code>${escapeHtml(t.teacher_id)}</code></td>
+          <td>${escapeHtml(t.last_name)} ${escapeHtml(t.first_name)}${t.patronymic ? ' ' + escapeHtml(t.patronymic) : ''}</td>
+          <td>${escapeHtml(t.email || '—')}</td>
           <td class="text-nowrap">
             <button class="btn btn-outline-primary btn-sm" onclick="openEditTeacher(${t.id})" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button class="btn btn-outline-secondary btn-sm" onclick="resetTeacherPassword(${t.id})" title="Сбросить пароль"><i class="bi bi-key"></i></button>
@@ -1235,17 +1235,17 @@
       const subjects = await res.json();
       document.getElementById('subjects-tbody').innerHTML = subjects.map(s => `
         <tr>
-          <td>${s.name}</td>
-          <td>${s.code || '—'}</td>
-          <td>${s.semester || '—'}</td>
-          <td>${s.teachers || '—'}</td>
+          <td>${escapeHtml(s.name)}</td>
+          <td>${escapeHtml(s.code || '—')}</td>
+          <td>${escapeHtml(s.semester || '—')}</td>
+          <td>${escapeHtml(s.teachers || '—')}</td>
           <td class="text-nowrap">
-            <button class="btn btn-outline-primary btn-sm me-1" onclick="openMembers(${s.id}, '${s.name.replace(/'/g, "\\'")}')"><i class="bi bi-people"></i></button>
+            <button class="btn btn-outline-primary btn-sm me-1" onclick="openMembers(${s.id}, '${escapeHtml(s.name).replace(/'/g, "\\'")}')"><i class="bi bi-people"></i></button>
             <button class="btn btn-outline-danger btn-sm" onclick="deleteSubject(${s.id})"><i class="bi bi-trash"></i></button>
           </td>
         </tr>`).join('');
       const sel = document.getElementById('assignment-subject-select');
-      sel.innerHTML = '<option value="">Выберите предмет</option>' + subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      sel.innerHTML = '<option value="">Выберите предмет</option>' + subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
     }
 
     document.getElementById('add-subject-btn').addEventListener('click', async () => {
@@ -1279,7 +1279,7 @@
       const groups = [...new Set(allStudents.map(s => s.group_name).filter(Boolean))].sort();
       document.getElementById('enroll-group-select').innerHTML =
         '<option value="" disabled selected>Выберите группу...</option>' +
-        groups.map(g => `<option value="${g}">${g}</option>`).join('');
+        groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
       await refreshMembers(subjectId);
       new bootstrap.Modal(document.getElementById('membersModal')).show();
     }
@@ -1292,12 +1292,12 @@
       unenrollAllBtn.style.display = enrolledStudents.length ? '' : 'none';
       document.getElementById('members-teachers-list').innerHTML = data.teachers.map(t => `
         <li class="list-group-item d-flex justify-content-between align-items-center py-1">
-          ${t.name}
+          ${escapeHtml(t.name)}
           <button class="btn btn-outline-danger btn-sm" onclick="removeTeacher(${t.id})"><i class="bi bi-x"></i></button>
         </li>`).join('') || '<li class="list-group-item text-muted small">Нет преподавателей</li>';
       document.getElementById('members-students-list').innerHTML = data.students.map(s => `
         <li class="list-group-item d-flex justify-content-between align-items-center py-1">
-          ${s.name}
+          ${escapeHtml(s.name)}
           <button class="btn btn-outline-danger btn-sm" onclick="unenrollStudent(${s.id})"><i class="bi bi-x"></i></button>
         </li>`).join('') || '<li class="list-group-item text-muted small">Нет студентов</li>';
     }
@@ -1371,9 +1371,9 @@
           ? '<span class="badge bg-secondary ms-1" title="В тетради"><i class="bi bi-book"></i></span>'
           : '<span class="badge bg-primary ms-1" title="Электронно"><i class="bi bi-file-earmark-arrow-up"></i></span>';
         return `<tr>
-          <td>${a.subject}</td>
-          <td>${a.title} ${typeIcon}</td>
-          <td>${a.deadline || '—'}</td>
+          <td>${escapeHtml(a.subject)}</td>
+          <td>${escapeHtml(a.title)} ${typeIcon}</td>
+          <td>${escapeHtml(a.deadline || '—')}</td>
           <td class="text-nowrap">
             <button class="btn btn-outline-primary btn-sm" onclick="openEditAssignment(${a.id})" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button class="btn btn-outline-danger btn-sm" onclick="deleteAssignment(${a.id})"><i class="bi bi-trash"></i></button>

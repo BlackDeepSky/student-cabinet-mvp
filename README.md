@@ -6,12 +6,12 @@
 </p>
 
 <p align="center">
-  <a href="https://student-cabinet-mvp.onrender.com">
-    <img src="https://img.shields.io/badge/demo-live-brightgreen?style=for-the-badge" alt="Demo">
+  <a href="https://cabinet.blackdeepsky.by">
+    <img src="https://img.shields.io/badge/live-brightgreen?style=for-the-badge" alt="Live">
   </a>
-  <img src="https://img.shields.io/badge/python-3.13-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
-  <img src="https://img.shields.io/badge/PostgreSQL-neon.tech-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/python-3.12-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/FastAPI-0.141-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
 </p>
 
 ---
@@ -66,14 +66,14 @@
 
 | Слой | Технология |
 |---|---|
-| Backend | Python 3.13, FastAPI |
-| База данных | PostgreSQL — [neon.tech](https://neon.tech) |
+| Backend | Python 3.12, FastAPI |
+| База данных | PostgreSQL 16 — домашний сервер (Mac mini), локально `127.0.0.1:5432` |
 | Файловое хранилище | Cloudflare R2 (S3-совместимый) |
 | Frontend | HTML + Bootstrap 5 + vanilla JS |
 | Безопасность | bcrypt, rate limiting, CORS, path traversal protection |
 | PWA | manifest.json + service worker |
 | Email | SMTP (уведомления об изменении статуса) |
-| Деплой | [Render](https://render.com) |
+| Деплой | Домашний сервер: systemd + Cloudflare Tunnel |
 
 ---
 
@@ -84,10 +84,12 @@
 ```bash
 git clone https://github.com/BlackDeepSky/student-cabinet-mvp.git
 cd student-cabinet-mvp
-python -m venv venv
+python3.12 -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+> Нужен Python 3.12+ (на сервере — системный 3.12).
 
 **2. Создать `.env`**
 
@@ -121,15 +123,44 @@ uvicorn app:app --reload
 
 ---
 
-## Деплой на Render
+## Деплой на домашний сервер
 
-`render.yaml` уже настроен. При деплое добавьте переменные `R2_*` и `SMTP_*` вручную в настройках сервиса (они помечены `sync: false` намеренно — чтобы секреты не попали в репозиторий).
+Сервис крутится на домашнем сервере (Mac mini, Ubuntu 24.04) за Cloudflare Tunnel.
+
+| Что | Где |
+|---|---|
+| Сайт | https://cabinet.blackdeepsky.by → `127.0.0.1:8002`, юнит `student-cabinet.service` |
+| Код | `/var/www/student-cabinet-mvp` (пользователь `cabinet`) |
+| БД | PostgreSQL 16: `student_cabinet` |
+| Секреты | `/var/www/student-cabinet-mvp/app.env` (chmod 600) |
+
+Обновление — одной командой с Mac (функция `deploy-cabinet` в `~/.zshrc`):
+
+```bash
+deploy-cabinet
+```
+
+Она делает `rsync` кода в `/var/www/student-cabinet-mvp` от имени `cabinet` и запускает серверный `deploy/deploy.sh` (создаёт venv → `pip install -r requirements.txt` → рестарт сервиса).
+
+Ручной запуск на сервере:
+
+```bash
+sudo -u cabinet bash /var/www/student-cabinet-mvp/deploy/deploy.sh
+```
+
+Логи:
+
+```bash
+sudo journalctl -u student-cabinet -f
+```
+
+> `render.yaml` оставлен в репозитории как история; боевой хостинг — домашний сервер.
 
 ---
 
 ## Тестовые данные
 
-> Доступны на [демо-стенде](https://student-cabinet-mvp.onrender.com)
+> Живой сайт — https://cabinet.blackdeepsky.by
 
 **Студенты** — вход через `/`
 
@@ -149,7 +180,9 @@ uvicorn app:app --reload
 
 | Логин | Пароль |
 |---|---|
-| admin | admin1234 |
+| admin | `ADMIN_PASSWORD` из окружения (см. `db_seed.py`) |
+
+> Это данные локального сида. На боевом сайте пароль администратора задан отдельно и в репозитории не публикуется.
 
 ---
 
